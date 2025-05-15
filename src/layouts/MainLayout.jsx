@@ -6,6 +6,7 @@ import AppRouter from "../router/AppRouter";
 function LayoutWrapper() {
   const location = useLocation();
   const isWritePage = location.pathname === "/write";
+  const isThreadPage = location.pathname === "/thread";
 
   return (
     <div className="w-full flex justify-center bg-gray-100 min-h-screen">
@@ -17,7 +18,7 @@ function LayoutWrapper() {
           <AppRouter />
         </main>
 
-        <NavbarLayout />
+       {!isThreadPage && <NavbarLayout />} 
       </div>
     </div>
   );
