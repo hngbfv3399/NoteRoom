@@ -19,6 +19,7 @@ dist-ssr
 
 # Local Firebase config (선택 사항)
 .firebase/
+functions/
 
 # Editor configs
 .vscode/*
