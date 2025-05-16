@@ -3,6 +3,7 @@ import HeaderLayout from "../components/layouts/HeaderLayout";
 import NavbarLayout from "../components/layouts/NavbarLayout";
 import AppRouter from "../router/AppRouter";
 
+
 function LayoutWrapper() {
   const location = useLocation();
   const isWritePage = location.pathname === "/write";
@@ -14,7 +15,7 @@ function LayoutWrapper() {
       <div className="w-full max-w-md h-screen bg-white flex flex-col relative overflow-hidden">
         {!isWritePage && <HeaderLayout />}
 
-        <main className="overflow-y-auto">
+        <main className="overflow-y-auto pb-16">
           <AppRouter />
         </main>
 

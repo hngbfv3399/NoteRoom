@@ -5,9 +5,9 @@ function ThreadPage() {
   const navigate = useNavigate();
   const goToHome = ()=>{
     navigate('/');
-}
+  }
   return (
-    <div className="h-screen overflow-y-scroll snap-y snap-mandatory hide-scrollbar">
+    <div className="h-full h-screen overflow-y-scroll snap-y snap-mandatory hide-scrollbar">
       {noteData.map((item, index) => (
         <div
           key={index}
