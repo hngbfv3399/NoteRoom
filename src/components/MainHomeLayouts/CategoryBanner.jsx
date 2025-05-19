@@ -1,3 +1,5 @@
+import ThemedButton from "../ui/ThemedButton";
+
 function CategoryBanner({ noteData }) {
   const containerStyle = {
     display: "flex",
@@ -9,8 +11,6 @@ function CategoryBanner({ noteData }) {
     width: "calc(100% / 5)",
     height: "5vh",
     marginRight: "15px",
-    background: "blue",
-    color: "white",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -19,9 +19,9 @@ function CategoryBanner({ noteData }) {
   return (
     <div style={containerStyle} className="hide-scrollbar">
       {noteData.map((item) => (
-        <div style={itemStyle} key={item.id}>
+        <ThemedButton style={itemStyle} key={item.id}>
           {item.category}
-        </div>
+        </ThemedButton>
       ))}
     </div>
   );

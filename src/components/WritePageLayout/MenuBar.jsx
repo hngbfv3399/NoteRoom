@@ -1,11 +1,10 @@
-import React from 'react'
+import React from "react";
 
-function MenuBar({editor}) {
-
-  if (!editor) return null
+function MenuBar({ editor }) {
+  if (!editor) return null;
 
   function isActiveColor(targetColor) {
-    return editor.getAttributes('textStyle').color === targetColor
+    return editor.getAttributes("textStyle").color === targetColor;
   }
 
   return (
@@ -16,7 +15,11 @@ function MenuBar({editor}) {
           onClick={() => editor.chain().toggleBold().focus().run()}
           disabled={!editor.can().chain().toggleBold().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center
-            ${editor.isActive('bold') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'} 
+            ${
+              editor.isActive("bold")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            } 
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           B
@@ -27,7 +30,11 @@ function MenuBar({editor}) {
           onClick={() => editor.chain().toggleItalic().focus().run()}
           disabled={!editor.can().chain().toggleItalic().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center italic hover:bg-gray-100
-            ${editor.isActive('italic') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'} 
+            ${
+              editor.isActive("italic")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            } 
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           I
@@ -38,19 +45,29 @@ function MenuBar({editor}) {
           onClick={() => editor.chain().toggleStrike().focus().run()}
           disabled={!editor.can().chain().toggleStrike().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center line-through hover:bg-gray-100
-            ${editor.isActive('strike') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'} 
+            ${
+              editor.isActive("strike")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            } 
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           S
         </button>
 
         {/* Headings */}
-        {[1, 2, 3, 4, 5, 6].map(level => (
+        {[1, 2, 3, 4, 5, 6].map((level) => (
           <button
             key={level}
-            onClick={() => editor.chain().toggleHeading({ level }).focus().run()}
+            onClick={() =>
+              editor.chain().toggleHeading({ level }).focus().run()
+            }
             className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-              ${editor.isActive('heading', { level }) ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'}`}
+              ${
+                editor.isActive("heading", { level })
+                  ? "bg-indigo-500 text-white"
+                  : "bg-white text-gray-800"
+              }`}
           >
             H{level}
           </button>
@@ -60,25 +77,37 @@ function MenuBar({editor}) {
         <button
           onClick={() => editor.chain().toggleBulletList().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${editor.isActive('bulletList') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'}`}
+            ${
+              editor.isActive("bulletList")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            }`}
         >
-          • 
+          •
         </button>
 
         {/* Ordered List */}
         <button
           onClick={() => editor.chain().toggleOrderedList().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${editor.isActive('orderedList') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'}`}
+            ${
+              editor.isActive("orderedList")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            }`}
         >
-          1. 
+          1.
         </button>
 
         {/* Code Block */}
         <button
           onClick={() => editor.chain().toggleCodeBlock().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${editor.isActive('codeBlock') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'}`}
+            ${
+              editor.isActive("codeBlock")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            }`}
         >
           {"</>"}
         </button>
@@ -87,7 +116,11 @@ function MenuBar({editor}) {
         <button
           onClick={() => editor.chain().toggleBlockquote().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${editor.isActive('blockquote') ? 'bg-indigo-500 text-white' : 'bg-white text-gray-800'}`}
+            ${
+              editor.isActive("blockquote")
+                ? "bg-indigo-500 text-white"
+                : "bg-white text-gray-800"
+            }`}
         >
           ❝
         </button>
@@ -129,23 +162,23 @@ function MenuBar({editor}) {
         {/* Text Color */}
         <div className="inline-flex gap-2 items-center px-2">
           {[
-            { label: 'Black', color: '#000000'},
-            { label: 'Blue', color: '#3B82F6' },
-            { label: 'Red', color: '#EF4444' },
-            { label: 'Purple', color: '#8B5CF6' },
-            { label: 'Green', color: '#10B981' },
-            { label: 'Orange', color: '#F97316' },
+            { label: "Black", color: "#000000" },
+            { label: "Blue", color: "#3B82F6" },
+            { label: "Red", color: "#EF4444" },
+            { label: "Purple", color: "#8B5CF6" },
+            { label: "Green", color: "#10B981" },
+            { label: "Orange", color: "#F97316" },
           ].map(({ label, color }) => (
             <button
               key={label}
               onClick={() => editor.chain().focus().setColor(color).run()}
               className={`w-8 h-8 rounded-full border transition shrink-0 ${
-                isActiveColor(color) ? 'ring-2 ring-indigo-500' : ''
+                isActiveColor(color) ? "ring-2 ring-indigo-500" : ""
               }`}
               style={{
                 color,
                 borderColor: color,
-                filter: isActiveColor(color) ? 'invert(2)' : 'none',
+                filter: isActiveColor(color) ? "invert(2)" : "none",
               }}
               title={`Text ${label}`}
             >
@@ -153,10 +186,9 @@ function MenuBar({editor}) {
             </button>
           ))}
         </div>
-
       </div>
     </div>
-  )
+  );
 }
 
-export default MenuBar
+export default MenuBar;

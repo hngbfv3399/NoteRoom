@@ -1,5 +1,6 @@
 import noteData from "../constants/noteData";
 import { useNavigate } from "react-router-dom";
+import ThreadSlide from "../components/ThreadLayout/ThreadSlide";
 
 function ThreadPage() {
   const navigate = useNavigate();
@@ -10,25 +11,7 @@ function ThreadPage() {
   return (
     <div className="w-full h-screen overflow-y-auto snap-y snap-mandatory hide-scrollbar">
       {noteData.map((item, index) => (
-        <div
-          key={index}
-          className="relative h-screen w-full snap-start flex items-center justify-center"
-        >
-          <img
-            src={item.image}
-            className="absolute w-full h-full object-cover"
-            alt={`노트 이미지 ${index}`}
-          />
-          <button
-            onClick={goToHome}
-            className="absolute top-4 left-4 text-2xl text-white bg-black/50 px-2 py-1 rounded"
-          >
-            &lt;-
-          </button>
-          <div className="absolute bottom-40 left-4 text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white">
-            {item.title}
-          </div>
-        </div>
+        <ThreadSlide key={index} item={item} index={index} onGoHome={goToHome} />
       ))}
     </div>
   );

@@ -1,7 +1,7 @@
 import WriteEditer from "../components/WritePageLayout/WriteEditer";
 function WritePage() {
   return (
-    <div className="h-full h-screen">
+    <div className="h-screen">
     <WriteEditer/>
     </div>
   );
