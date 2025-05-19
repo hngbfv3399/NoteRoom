@@ -9,7 +9,7 @@ function ThreadPage() {
   };
 
   return (
-    <div className="w-full h-screen overflow-y-auto snap-y snap-mandatory hide-scrollbar">
+    <div className="w-full h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar">
       {noteData.map((item, index) => (
         <ThreadSlide key={index} item={item} index={index} onGoHome={goToHome} />
       ))}

@@ -10,7 +10,7 @@ function NavbarLayout() {
 
   return (
     <div
-      className={`${themeClass} fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-10 border-t border-black px-6 py-4 flex justify-between items-center`}
+    className={`${themeClass} fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl z-10 border-t border-black px-6 py-4 flex justify-between items-center`}
     >
       <Link className="text-2xl sm:text-3xl" to="/">
         🏠

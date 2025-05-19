@@ -1,6 +1,6 @@
 function ProfileInfoCard() {
   return (
-    <div className="absolute bottom-26 left-1/2 transform -translate-x-1/2 max-w-xl w-full bg-black/10 backdrop-blur-sm rounded-xl p-7 text-white shadow-lg z-10">
+    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 max-w-xl w-full bg-black/10 backdrop-blur-sm rounded-xl p-7 text-white shadow-lg z-10">
       <h1 className="text-4xl font-extrabold mb-4 drop-shadow-lg">김지호</h1>
 
       <div className="mb-6 space-y-2">

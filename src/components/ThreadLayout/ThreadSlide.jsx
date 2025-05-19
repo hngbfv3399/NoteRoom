@@ -2,7 +2,7 @@ function ThreadSlide({ item, index, onGoHome }) {
   return (
     <div
       key={index}
-      className="relative h-screen w-full snap-start flex items-center justify-center"
+      className="relative h-full w-full snap-start flex items-center justify-center"
     >
       <img
         src={item.image}

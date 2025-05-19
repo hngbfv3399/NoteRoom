@@ -10,7 +10,6 @@ function MainHome() {
     padding: "15px",
     border: "1px solid #ccc",
     textAlign: "center",
-    paddingBottom: "80px",
   };
   return (
     <div className="h-full">

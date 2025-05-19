@@ -21,7 +21,7 @@ function UserProfile() {
   }, []);
 
   return (
-    <div className="h-screen overflow-hidden">
+    <div className="h-full overflow-hidden">
       <div className="h-full overflow-y-auto snap-y snap-mandatory">
         <section className="relative h-full snap-start flex-shrink-0 px-6 py-10">
           <img
