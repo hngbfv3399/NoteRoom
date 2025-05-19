@@ -4,7 +4,7 @@ function MainContent({ noteData }) {
       {noteData.map((item) => (
         <div
           key={item.id}
-          className="relative h-[40vh] p-4 bg-[#fffafa] rounded-md text-base"
+          className="relative h-[40vh] p-4 rounded-md text-base"
         >
           <div className="absolute top-1/2 left-1/2 w-[90%] h-[70%] transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded overflow-hidden">
             <img

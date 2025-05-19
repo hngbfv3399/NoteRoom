@@ -1,33 +1,43 @@
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import "../../styles/WriteEditerStyle.css";
-import Placeholder from "@tiptap/extension-placeholder";
-const editorStyles = {
-  minHeight: "300px",
-  padding: "1rem",
-  lineHeight: 1.6,
-};
+import React from 'react'
+import { EditorContent, useEditor } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Color from '@tiptap/extension-color'
+import ListItem from '@tiptap/extension-list-item'
+import TextStyle from '@tiptap/extension-text-style'
+import MenuBar from './MenuBar'
+import '../../styles/WriteEditerStyle.css'
 
-function WriteEditor() {
+const editorExtensions = [
+  StarterKit.configure({
+    bulletList: { keepMarks: true, keepAttributes: false },
+    orderedList: { keepMarks: true, keepAttributes: false },
+  }),
+  Color.configure({ types: [TextStyle.name, ListItem.name] }),
+  TextStyle.configure({ types: [ListItem.name] }),
+]
+
+function EditorController() {
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({
-        placeholder: "텍스트를 입력하시오.",
-      }),
-    ],
-    content: "",
-  });
+    extensions: editorExtensions,
+    content: '<p>Hello World!</p>',
+  })
 
+  if (!editor) return null
   return (
-    <>
-        <EditorContent
-          editor={editor}
-          style={editorStyles}
-          className="ProseMirror"
-        />
-    </>
-  );
+    <div className="editor-wrapper h-[60vh] px-4 pt-16 overflow-y-auto relative">
+      <div className="w-full max-w-md bg-white border-b border-gray-300 z-50">
+        <MenuBar editor={editor} />
+      </div>
+
+      <EditorContent
+        editor={editor}
+        className="outline-none mt-3 pl-5"
+        style={{ minHeight: '60vh' }}
+      />
+    </div>
+  )
 }
 
-export default WriteEditor;
+export default function WriteEditor() {
+  return <EditorController />
+}

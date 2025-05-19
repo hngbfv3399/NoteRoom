@@ -1,32 +1,48 @@
+/* 기본 텍스트 스타일 */
+
+
+.editor-wrapper .ProseMirror {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 .ProseMirror p {
-    margin: 0.4rem 0;
     font-size: 1.125rem;
     line-height: 1.6;
+    padding: 0;
   }
   
+  /* 줄바꿈 */
   .ProseMirror br {
-    margin: 0;
     font-size: 1.125rem;
   }
   
+  /* 제목 스타일 - 마크다운 #, ##, ### 등 */
   .ProseMirror h1 {
-    font-size: 2.5rem;
+    font-size: 2.5rem; /* # */
     font-weight: 700;
-    margin: 1.5rem 0;
   }
   
   .ProseMirror h2 {
-    font-size: 2rem;
+    font-size: 2rem; /* ## */
     font-weight: 700;
-    margin: 1.5rem 0;
   }
   
   .ProseMirror h3 {
-    font-size: 1.75rem; 
+    font-size: 1.75rem; /* ### */
     font-weight: 600;
-    margin: 1.2rem 0;
+  }
+  .ProseMirror h4 {
+    font-size: 1.25rem; /* #### */
+    font-weight: 600;
+  }
+  .ProseMirror h5 {
+    font-size: 1rem; /* #### */
+    font-weight: 600;
   }
   
+  /* 인용구 스타일 - 마크다운 > */
   .ProseMirror blockquote {
     border-left: 4px solid #ccc;
     margin: 1rem 0;
@@ -36,6 +52,7 @@
     background-color: #f9f9f9;
   }
   
+  /* 코드 블럭 - 마크다운 ``` */
   .ProseMirror pre {
     background-color: #2d2d2d;
     color: #f8f8f2;
@@ -43,11 +60,10 @@
     border-radius: 6px;
     overflow-x: auto;
     font-family: 'Source Code Pro', monospace, monospace;
-    margin: 1rem 0;
   }
   
+  /* 인라인 코드 - 마크다운 `코드` */
   .ProseMirror code {
-    background-color: #eee;
     padding: 0.2rem 0.4rem;
     border-radius: 4px;
     font-family: monospace;
@@ -55,12 +71,10 @@
   }
   
   .ProseMirror ul {
-    margin: 0 0 1rem 1.5rem;
     list-style-type: disc;
   }
   
   .ProseMirror ol {
-    margin: 0 0 1rem 1.5rem;
     list-style-type: decimal;
   }
   
@@ -76,5 +90,23 @@
   .ProseMirror:focus {
     border-color: black;
     box-shadow: 0 0 0 2px black;
+  }
+  
+
+  .editor-wrapper {
+    border: 1px solid #ddd;
+    padding: 12px;
+    border-radius: 4px;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  .menu-bar {
+    margin-bottom: 8px;
+  }
+  
+  .editor-content {
+    min-height: 150px;
+    outline: none;
   }
   
