@@ -2,7 +2,7 @@ import { BrowserRouter } from "react-router-dom";
 import HeaderLayout from "../components/layouts/HeaderLayout";
 import NavbarLayout from "../components/layouts/NavbarLayout";
 import AppRouter from "../router/AppRouter";
-import { getThemeClass } from "../utils/themeHelper"; // 경로 맞춰서
+import { getThemeClass } from "../utils/themeHelper";
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 

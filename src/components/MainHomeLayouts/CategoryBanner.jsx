@@ -1,6 +1,20 @@
+import { useDispatch } from "react-redux";
 import ThemedButton from "../ui/ThemedButton";
+import {
+  setCategoryFilter,
+  setCategoryFilterReset,
+} from "../../features/noteDataSlice";
+function CategoryBanner({ category }) {
+  const dispatch = useDispatch();
+  const clikedCategoryButton = (item, index) => {
+    if (index === 0) {
+      dispatch(setCategoryFilterReset());
+    } else {
+      dispatch(setCategoryFilter(item));
+    }
+    console.log(item);
+  };
 
-function CategoryBanner({ noteData }) {
   const containerStyle = {
     display: "flex",
     overflowX: "auto",
@@ -18,9 +32,13 @@ function CategoryBanner({ noteData }) {
   };
   return (
     <div style={containerStyle} className="hide-scrollbar">
-      {noteData.map((item) => (
-        <ThemedButton style={itemStyle} key={item.id}>
-          {item.category}
+      {category.map((item, index) => (
+        <ThemedButton
+          style={itemStyle}
+          key={index}
+          onClick={() => clikedCategoryButton(item, index)}
+        >
+          {item}
         </ThemedButton>
       ))}
     </div>

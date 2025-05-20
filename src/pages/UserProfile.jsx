@@ -21,8 +21,7 @@ function UserProfile() {
   }, []);
 
   return (
-    <div className="h-full overflow-hidden">
-      <div className="h-full overflow-y-auto snap-y snap-mandatory">
+      <div className="h-full overflow-y-auto snap-y snap-mandatory hide-scrollbar">
         <section className="relative h-full snap-start flex-shrink-0 px-6 py-10">
           <img
             src="https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=1200"
@@ -37,7 +36,6 @@ function UserProfile() {
 
         <NoteGrid />
       </div>
-    </div>
   );
 }
 

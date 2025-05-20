@@ -1,5 +1,5 @@
 import React from "react";
-
+import ThemedButton from '../ui/ThemedButton'
 function MenuBar({ editor }) {
   if (!editor) return null;
 
@@ -11,153 +11,114 @@ function MenuBar({ editor }) {
     <div className="control-group border-b border-gray-300 mb-2">
       <div className="button-group flex overflow-x-auto whitespace-nowrap gap-2 p-2">
         {/* Bold */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleBold().focus().run()}
           disabled={!editor.can().chain().toggleBold().focus().run()}
           className={`inline-block px-3 py-2 border rounded-md text-sm text-center
-            ${
-              editor.isActive("bold")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            } 
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           B
-        </button>
+        </ThemedButton>
 
         {/* Italic */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleItalic().focus().run()}
           disabled={!editor.can().chain().toggleItalic().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center italic hover:bg-gray-100
-            ${
-              editor.isActive("italic")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            } 
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center italic
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           I
-        </button>
+        </ThemedButton>
 
         {/* Strike */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleStrike().focus().run()}
           disabled={!editor.can().chain().toggleStrike().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center line-through hover:bg-gray-100
-            ${
-              editor.isActive("strike")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            } 
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center line-through
             disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           S
-        </button>
+        </ThemedButton>
 
         {/* Headings */}
         {[1, 2, 3, 4, 5, 6].map((level) => (
-          <button
+          <ThemedButton
             key={level}
             onClick={() =>
               editor.chain().toggleHeading({ level }).focus().run()
             }
-            className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-              ${
-                editor.isActive("heading", { level })
-                  ? "bg-indigo-500 text-white"
-                  : "bg-white text-gray-800"
-              }`}
+            className={`inline-block px-3 py-2 border rounded-md text-sm text-center`}
           >
             H{level}
-          </button>
+          </ThemedButton>
         ))}
 
         {/* Bullet List */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleBulletList().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${
-              editor.isActive("bulletList")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            }`}
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center`}
         >
           •
-        </button>
+        </ThemedButton>
 
         {/* Ordered List */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleOrderedList().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${
-              editor.isActive("orderedList")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            }`}
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center`}
         >
           1.
-        </button>
+        </ThemedButton>
 
         {/* Code Block */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleCodeBlock().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${
-              editor.isActive("codeBlock")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            }`}
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center`}
         >
           {"</>"}
-        </button>
+        </ThemedButton>
 
         {/* Blockquote */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().toggleBlockquote().focus().run()}
-          className={`inline-block px-3 py-2 border rounded-md text-sm text-center hover:bg-gray-100
-            ${
-              editor.isActive("blockquote")
-                ? "bg-indigo-500 text-white"
-                : "bg-white text-gray-800"
-            }`}
+          className={`inline-block px-3 py-2 border rounded-md text-sm text-center
+`}
         >
           ❝
-        </button>
+        </ThemedButton>
 
         {/* Horizontal Rule */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().setHorizontalRule().focus().run()}
-          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 hover:bg-gray-100 text-sm"
+          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 text-sm"
         >
           ―
-        </button>
+        </ThemedButton>
 
         {/* Hard Break */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().setHardBreak().focus().run()}
-          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 hover:bg-gray-100 text-sm"
+          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 text-sm"
         >
           ↵
-        </button>
+        </ThemedButton>
 
         {/* Undo */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().undo().focus().run()}
           disabled={!editor.can().undo()}
-          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-sm"
+          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           ⎌ 되돌리기
-        </button>
+        </ThemedButton>
 
         {/* Redo */}
-        <button
+        <ThemedButton
           onClick={() => editor.chain().redo().focus().run()}
           disabled={!editor.can().redo()}
-          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 text-sm"
+          className="inline-block px-3 py-2 border rounded-md bg-white text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           ↻ 다시하기
-        </button>
+        </ThemedButton>
 
         {/* Text Color */}
         <div className="inline-flex gap-2 items-center px-2">
@@ -169,7 +130,7 @@ function MenuBar({ editor }) {
             { label: "Green", color: "#10B981" },
             { label: "Orange", color: "#F97316" },
           ].map(({ label, color }) => (
-            <button
+            <ThemedButton
               key={label}
               onClick={() => editor.chain().focus().setColor(color).run()}
               className={`w-8 h-8 rounded-full border transition shrink-0 ${
@@ -183,7 +144,7 @@ function MenuBar({ editor }) {
               title={`Text ${label}`}
             >
               A
-            </button>
+            </ThemedButton>
           ))}
         </div>
       </div>
