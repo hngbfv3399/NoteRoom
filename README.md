@@ -46,3 +46,12 @@
     - noteData redux로 전역상태 관리
     - 정렬 및 필터기능 추가
     - 감정 분석, 친구 찾기 모달창 생성(framer)
+
+## 2025년 5월 22일
+- Firebase 통신
+    - Editor 관련 페이지 전체 수정
+    - firebase 유틸 함수 생성(생성 및 삭제)
+-React Query 사용
+    - MainHome 관련 페이지 전체 수정
+        - Redux 삭제 React Query 변환
+        - ThreadPage수정
