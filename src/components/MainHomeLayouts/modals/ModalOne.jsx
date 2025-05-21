@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 
-function EmotionAnalysisModal({ isOpen, onClose, children }) {
+function ModalOne({ isOpen, onClose, children }) {
   if (!isOpen) return null;
 
   const dropDownVariants = {
@@ -11,7 +11,6 @@ function EmotionAnalysisModal({ isOpen, onClose, children }) {
 
   return (
     <>
-      {/* 배경 어둡게 (클릭 시 닫기) */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
         onClick={onClose}
@@ -32,7 +31,6 @@ function EmotionAnalysisModal({ isOpen, onClose, children }) {
               className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 relative"
               style={{ height: "80vh", marginTop: "10vh" }}
             >
-              {/* 닫기 버튼 */}
               <button
                 className="absolute top-3 right-3 text-gray-600 hover:text-gray-900"
                 onClick={onClose}
@@ -40,7 +38,6 @@ function EmotionAnalysisModal({ isOpen, onClose, children }) {
               >
                 ✕
               </button>
-              {/* 모달 내용 */}
               {children}
             </div>
           </motion.div>
@@ -50,4 +47,4 @@ function EmotionAnalysisModal({ isOpen, onClose, children }) {
   );
 }
 
-export default EmotionAnalysisModal;
+export default ModalOne;

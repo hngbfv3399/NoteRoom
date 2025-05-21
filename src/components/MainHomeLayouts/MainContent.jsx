@@ -1,11 +1,20 @@
-import { useSelector } from "react-redux";
+import { useQuery } from "@tanstack/react-query";
+import { loadNoteToFirebase } from "../../utils/firebaseNoteDataUtil";
+import { filterByCategory, sortNewNote, sortHotNote } from '../../utils/noteDataUtils'
 
-function MainContent() {
-  const noteData = useSelector((state) => state.noteData.noteData);
-  const filterCategory = useSelector((state) => state.noteData.filterCategory);
-  const filteredNotes = filterCategory
-    ? noteData.filter((note) => note.category === filterCategory)
-    : noteData;
+function MainContent({ filterCategory, sortType }) {
+  const { data: noteData = [], isLoading, isError } = useQuery({
+    queryKey: ["notes"],
+    queryFn: loadNoteToFirebase,
+  });
+
+  if (isLoading) return <div>로딩 중...</div>;
+  if (isError) return <div>에러 발생</div>;
+
+  let filteredNotes = filterByCategory(noteData, filterCategory);
+
+  if (sortType === 'new') filteredNotes = sortNewNote(filteredNotes);
+  else if (sortType === 'hot') filteredNotes = sortHotNote(filteredNotes);
 
   return (
     <div className="space-y-4 flex flex-col items-center">
@@ -33,7 +42,5 @@ function MainContent() {
     </div>
   );
 }
-
-
 
 export default MainContent;

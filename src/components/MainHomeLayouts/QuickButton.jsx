@@ -1,16 +1,13 @@
-import { useDispatch } from "react-redux";
-import { sortNewNote,sortHotNote } from "../../features/noteDataSlice";
 import ThemedButton from "../ui/ThemedButton";
-function QuickButton({ QuickButtonList, openFriendModal,openEmotionModal }) {
-  const dispatch = useDispatch();
-  
+
+function QuickButton({ QuickButtonList, onSortNew, onSortHot, openFriendModal, openEmotionModal }) {
   const clickedQuickButton = (item, index) => {
     switch (index) {
       case 0:
-        dispatch(sortNewNote());
+        onSortNew();
         break;
       case 1:
-        dispatch(sortHotNote());
+        onSortHot();
         break;
       case 2:
         openEmotionModal();
@@ -37,6 +34,5 @@ function QuickButton({ QuickButtonList, openFriendModal,openEmotionModal }) {
     </div>
   );
 }
-
 
 export default QuickButton;
