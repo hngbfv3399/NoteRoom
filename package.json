@@ -12,6 +12,7 @@
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@reduxjs/toolkit": "^2.8.1",
+    "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query": "^5.76.1",
     "@tanstack/react-query-devtools": "^5.76.1",
     "@tiptap/extension-character-count": "^2.12.0",
@@ -28,13 +29,13 @@
     "@tiptap/react": "^2.12.0",
     "@tiptap/starter-kit": "^2.12.0",
     "@tiptap/suggestion": "^2.12.0",
-    "axios": "^1.9.0",
     "classnames": "^2.5.1",
     "dayjs": "^1.11.13",
     "dom-to-image": "^2.6.0",
     "firebase": "^11.7.1",
     "framer-motion": "^12.11.0",
     "fuse.js": "^7.1.0",
+    "he": "^1.2.0",
     "html2canvas": "^1.4.1",
     "immer": "^10.1.1",
     "lodash.debounce": "^4.0.8",
@@ -47,7 +48,6 @@
     "react-router-dom": "^7.6.0",
     "recharts": "^2.15.3",
     "remark-gfm": "^4.0.1",
-    "tailwindcss": "^4.1.6",
     "typewriter-effect": "^2.22.0",
     "uuid": "^11.1.0"
   },
@@ -55,7 +55,7 @@
     "@eslint/js": "^9.25.0",
     "@percy/cli": "^1.30.10",
     "@percy/cypress": "^3.1.6",
-    "@tailwindcss/postcss": "^4.1.6",
+    "@tailwindcss/postcss": "^4.1.7",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
@@ -68,6 +68,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.7",
     "vite": "^6.3.5"
   }
 }

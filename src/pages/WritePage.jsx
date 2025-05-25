@@ -1,4 +1,4 @@
-import WriteEditer from "../components/WritePageLayout/WriteEditer";
+import WriteEditer from "@/features/WritePage/WriteEditer";
 function WritePage() {
   return (
     <div className="h-screen">

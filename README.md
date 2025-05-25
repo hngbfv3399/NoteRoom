@@ -1,57 +1,132 @@
-# NoteRoom Project
+# 📝 NoteRoom
 
-## 2025년 5월 13일
-- vite 환경으로 React 프로젝트 생성
-- Firebase 서버 연동
-- github 연동
-- 필요 라이브러리 설치 (redux, tailwind, react-router, firebase, tiptap등)
-- 페이지 및 코드 분할을 위해 프로젝트 구조 세팅
----
-## 2025년 5월 14일
-- 기본 레이아웃 설계
-    - 3개 레이아웃 생성(Header,main,Navbar) 이때 Navbar는 footer 역할과 비슷함
-    - main 영역은 라우터에 맞게 보이도록 코딩
-- 모바일 디자인 위주로 작성
----
-## 2025년 5월 15일
-- 홈 화면 디자인 초안 구상 및 구현
----
+감정과 생각을 기록하고 공유하는 소셜 노트 플랫폼
 
-## 2025년 5월 16일
-- 쓰레드 화면 디자인 초안 구상 및 구현
----
+## 🌟 주요 기능
 
-## 2025년 5월 17일
-- 에디터 화면 디자인 초안 구상 및 구현
-- tiptap 라이브러리 활용 시작
-- tailwind 스타일 초기화로 인한 오류 수정
----
-## 2025년 5월 18일
-- tiptap editor.chain()을 이용한 토글 버튼 코드 작성
----
+### 📊 감정 기록
+- 감정 온도 시스템으로 현재 감정 상태 기록
+- 일기, 시, 사진 등 다양한 형태로 감정 표현
+- 카테고리별 노트 관리
 
-## 2025년 5월 19일
-- 유저페이지 구현
----
-## 2025년 5월 20일
-- 세팅페이지 작성
-    - redux 설치 및 themeSlice 생성(테마 스타일 전역상태로 관리 하기 위함)
-    - 공통 Button UI 생성
-    - 헬퍼 함수 themeHelper.js 생성 및 재사용
-- 프로젝트 컴포넌트 구조 분할(유지보수 용이)
-- 디자인 레이아웃 오류 수정(ex : main 영역 넘침 현상 해결)
+### 🤝 소셜 기능
+- 다른 사용자의 노트 열람
+- 좋아요 기능으로 공감 표현
+- 프로필을 통한 사용자 간 소통
 
-## 2025년 5월 21일
-- 메인 홈 페이지 기능 확장
-    - noteData redux로 전역상태 관리
-    - 정렬 및 필터기능 추가
-    - 감정 분석, 친구 찾기 모달창 생성(framer)
+### 🎨 개성있는 프로필
+- 자신만의 프로필 페이지 커스터마이징
+- 좋아하는 명언, 취미 등 개성 표현
+- 작성한 노트 모아보기
 
-## 2025년 5월 22일
-- Firebase 통신
-    - Editor 관련 페이지 전체 수정
-    - firebase 유틸 함수 생성(생성 및 삭제)
--React Query 사용
-    - MainHome 관련 페이지 전체 수정
-        - Redux 삭제 React Query 변환
-        - ThreadPage수정
+## 🚀 시작하기
+
+### 필수 요구사항
+- Node.js 18.0.0 이상
+- npm 9.0.0 이상
+- Firebase 프로젝트
+
+### 설치 방법
+
+1. 저장소 클론
+```bash
+git clone https://github.com/yourusername/noteroom.git
+cd noteroom
+```
+
+2. 의존성 설치
+```bash
+npm install
+```
+
+3. 환경 변수 설정
+`.env` 파일을 생성하고 Firebase 설정 추가:
+```env
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+4. 개발 서버 실행
+```bash
+npm run dev
+```
+
+### 배포 방법
+
+1. 프로젝트 빌드
+```bash
+npm run build
+```
+
+2. Firebase 배포
+```bash
+firebase deploy
+```
+
+## 🛠 기술 스택
+
+### Frontend
+- React
+- TailwindCSS
+- Redux Toolkit
+- TipTap Editor
+- Framer Motion
+
+### Backend
+- Firebase
+  - Authentication
+  - Firestore
+  - Storage
+  - Hosting
+
+### 도구
+- Vite
+- Day.js
+- PropTypes
+
+## 📁 프로젝트 구조
+```
+src/
+├── components/      # 공통 컴포넌트
+├── features/        # 기능별 컴포넌트
+├── hooks/          # 커스텀 훅
+├── pages/          # 페이지 컴포넌트
+├── services/       # Firebase 설정
+├── store/          # Redux 스토어
+├── utils/          # 유틸리티 함수
+└── App.jsx         # 앱 진입점
+```
+
+## 🔒 보안 규칙
+
+### Firestore 규칙
+- 사용자 인증 기반 접근 제어
+- 데이터 유효성 검사
+- 사용자별 권한 관리
+
+### Storage 규칙
+- 이미지 파일 제한 (5MB)
+- 파일 형식 검증
+- 사용자별 접근 권한
+
+## 🤝 기여하기
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📜 라이선스
+MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+## 👥 팀 구성
+- 개발: [개발자 이름]
+- 디자인: [디자이너 이름]
+- 기획: [기획자 이름]
+
+## 📞 문의
+프로젝트에 대한 문의사항이 있으시다면 [이슈](https://github.com/yourusername/noteroom/issues)를 생성해주세요.

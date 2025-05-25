@@ -2,8 +2,49 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    // 사용자 인증 확인 함수
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 요청한 사용자가 문서의 소유자인지 확인하는 함수
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 사용자 프로필 컬렉션 규칙
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    // 노트 컬렉션 규칙
+    match /notes/{noteId} {
+      // 읽기는 모든 인증된 사용자에게 허용
+      allow read: if isAuthenticated();
+      
+      // 생성 시 필수 필드 확인
+      allow create: if isAuthenticated() 
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.content is string
+        && request.resource.data.category is string;
+      
+      // 수정은 작성자만 가능
+      allow update: if isAuthenticated() 
+        && resource.data.userUid == request.auth.uid;
+      
+      // 삭제는 작성자만 가능
+      allow delete: if isAuthenticated() 
+        && resource.data.userUid == request.auth.uid;
+
+      // 좋아요 서브컬렉션 규칙
+      match /likesUsers/{userId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
   }
 }

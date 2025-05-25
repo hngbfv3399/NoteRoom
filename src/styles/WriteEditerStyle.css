@@ -1,112 +1,185 @@
-/* 기본 텍스트 스타일 */
+/* 에디터 컨테이너 */
+.editor-wrapper {
+  border: 1px solid #ddd;
+  padding: 12px;
+  border-radius: 8px;
+  max-width: auto;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
 
+/* 에디터 컨텐츠 영역 */
+.editor-content {
+  position: relative;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  background-color: white;
+  min-height: calc(100vh - 300px);
+  display: flex;
+  flex-direction: column;
+}
 
+.editor-content .ProseMirror {
+  flex-grow: 1;
+  min-height: calc(100vh - 400px);
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* 포커스 있을 때 테두리 강조 */
+.editor-content:focus-within {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* ProseMirror 편집 영역 */
 .editor-wrapper .ProseMirror {
   outline: none !important;
   border: none !important;
   box-shadow: none !important;
+  font-family: 'Noto Sans KR', sans-serif;
+  min-height: 150px;
+  padding: 0;
 }
 
+/* 기본 단락 */
 .ProseMirror p {
-    font-size: 1.125rem;
-    line-height: 1.6;
-    padding: 0;
-  }
-  
-  /* 줄바꿈 */
-  .ProseMirror br {
-    font-size: 1.125rem;
-  }
-  
-  /* 제목 스타일 - 마크다운 #, ##, ### 등 */
-  .ProseMirror h1 {
-    font-size: 2.5rem; /* # */
-    font-weight: 700;
-  }
-  
-  .ProseMirror h2 {
-    font-size: 2rem; /* ## */
-    font-weight: 700;
-  }
-  
-  .ProseMirror h3 {
-    font-size: 1.75rem; /* ### */
-    font-weight: 600;
-  }
-  .ProseMirror h4 {
-    font-size: 1.25rem; /* #### */
-    font-weight: 600;
-  }
-  .ProseMirror h5 {
-    font-size: 1rem; /* #### */
-    font-weight: 600;
-  }
-  
-  /* 인용구 스타일 - 마크다운 > */
-  .ProseMirror blockquote {
-    border-left: 4px solid #ccc;
-    margin: 1rem 0;
-    padding-left: 1rem;
-    color: #666;
-    font-style: italic;
-    background-color: #f9f9f9;
-  }
-  
-  /* 코드 블럭 - 마크다운 ``` */
-  .ProseMirror pre {
-    background-color: #2d2d2d;
-    color: #f8f8f2;
-    padding: 1rem;
-    border-radius: 6px;
-    overflow-x: auto;
-    font-family: 'Source Code Pro', monospace, monospace;
-  }
-  
-  /* 인라인 코드 - 마크다운 `코드` */
-  .ProseMirror code {
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.95rem;
-  }
-  
-  .ProseMirror ul {
-    list-style-type: disc;
-  }
-  
-  .ProseMirror ol {
-    list-style-type: decimal;
-  }
-  
-  .ProseMirror p.is-empty::before {
-    content: attr(data-placeholder);
-    float: left;
-    color: #999;
-    pointer-events: none;
-    height: 0;
-    user-select: none;
-  }
-  
-  .ProseMirror:focus {
-    border-color: black;
-    box-shadow: 0 0 0 2px black;
-  }
-  
+  font-size: 1.125rem;
+  line-height: 1.6;
+  padding: 0;
+}
 
-  .editor-wrapper {
-    border: 1px solid #ddd;
-    padding: 12px;
-    border-radius: 4px;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-  
-  .menu-bar {
-    margin-bottom: 8px;
-  }
-  
-  .editor-content {
-    min-height: 150px;
-    outline: none;
-  }
-  
+/* 빈 문단 플레이스홀더 */
+.ProseMirror p.is-empty::before {
+  content: attr(data-placeholder);
+  color: #999;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 제목 스타일 */
+.ProseMirror h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 1em 0 0.5em 0;
+}
+
+.ProseMirror h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 1em 0 0.5em 0;
+}
+
+.ProseMirror h3 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 1em 0 0.5em 0;
+}
+
+.ProseMirror h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1em 0 0.5em 0;
+}
+
+.ProseMirror h5 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1em 0 0.5em 0;
+}
+
+/* 인용구 */
+.ProseMirror blockquote {
+  border-left: 4px solid #ccc;
+  margin: 1rem 0;
+  padding-left: 1rem;
+  font-style: italic;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+/* 코드 블럭 */
+.ProseMirror pre {
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-family: 'Source Code Pro', monospace;
+  font-size: 0.9rem;
+  margin: 1em 0;
+}
+
+/* 인라인 코드 */
+.ProseMirror code {
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+/* 리스트 스타일 */
+.ProseMirror ul {
+  list-style-type: disc;
+  margin-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  margin-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+/* ProseMirror 포커스 스타일 */
+.ProseMirror:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px #3b82f6;
+  outline: none;
+  transition: box-shadow 0.3s ease;
+}
+
+/* 이미지 스타일 */
+.ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.ProseMirror img:hover {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.ProseMirror img.selected {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* 이미지 컨트롤 */
+.image-controls {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.image-controls input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.image-controls input:focus {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
