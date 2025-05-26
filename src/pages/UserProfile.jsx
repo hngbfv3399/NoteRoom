@@ -18,7 +18,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { getUserDataByUid, loadNotesPage, updateUserNoteCount } from "@/utils/firebaseNoteDataUtil"
+import { getUserDataByUid, loadNotesPage, updateUserNoteCount, deleteNoteFromFirestore } from "@/utils/firebaseNoteDataUtil"
 import { auth } from "@/services/firebase";
 import ProfileInfoCard from "@/features/UserProfile/ProfileInfoCard";
 import NoteGrid from "@/features/UserProfile/NoteGrid";
@@ -194,6 +194,28 @@ function UserProfile() {
     // 사용자 데이터도 새로고침 (noteCount 감소)
     fetchUserData();
   }, []);
+
+  // 노트 삭제 핸들러 추가
+  const handleDeleteNote = useCallback(async (note) => {
+    try {
+      await deleteNoteFromFirestore(note.id, currentUser.uid);
+      
+      // 성공 시 노트 목록에서 제거
+      handleNoteDeleted(note.id);
+      
+      // 성공 메시지 표시
+      if (typeof window !== 'undefined' && window.showToast) {
+        window.showToast('노트가 성공적으로 삭제되었습니다.', 'success');
+      }
+    } catch (error) {
+      console.error("노트 삭제 실패:", error);
+      
+      // 에러 메시지 표시
+      if (typeof window !== 'undefined' && window.showToast) {
+        window.showToast('노트 삭제에 실패했습니다. 다시 시도해주세요.', 'error');
+      }
+    }
+  }, [currentUser?.uid, handleNoteDeleted]);
 
   // 노트 섹션으로 스크롤하는 함수
   const scrollToNotes = () => {
@@ -411,6 +433,7 @@ function UserProfile() {
             notes={notes} 
             onNoteClick={handleNoteClick}
             onNoteEdit={isOwnProfile ? handleEditNote : null}
+            onNoteDelete={isOwnProfile ? handleDeleteNote : null}
             isOwnProfile={isOwnProfile}
           />
         </div>
@@ -422,7 +445,7 @@ function UserProfile() {
         onClose={handleCloseEditModal}
         note={selectedEditNote}
         onNoteUpdated={handleNoteUpdated}
-        onNoteDeleted={handleNoteDeleted}
+        onNoteDeleted={handleDeleteNote}
       />
 
       {/* 감정 선택 모달 */}

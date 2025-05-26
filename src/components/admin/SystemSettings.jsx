@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { motion } from 'framer-motion';
 import { 
   FiSettings, 
   FiShield, 
@@ -14,13 +13,16 @@ import {
   FiPlus,
   FiTrash2,
   FiSave,
-  FiX
+  FiX,
+  FiTool,
+  FiClock
 } from 'react-icons/fi';
 import { 
   manageBlockedIPs, 
   manageKeywordFilters, 
   manageSystemSettings,
-  dataMigration
+  dataMigration,
+  maintenanceMode
 } from '@/utils/adminUtils';
 
 function SystemSettings() {
@@ -117,6 +119,58 @@ function SystemSettings() {
     }
   };
 
+  // 서비스 점검 모드 토글
+  const handleMaintenanceToggle = async (enabled) => {
+    try {
+      setSaving(true);
+      
+      if (enabled) {
+        await maintenanceMode.enableMaintenance(
+          settings.maintenanceMode?.message || '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+          settings.maintenanceMode?.estimatedEndTime
+        );
+      } else {
+        await maintenanceMode.disableMaintenance();
+      }
+      
+      // 설정 다시 로드
+      await loadSettings();
+      
+      if (enabled) {
+        alert('서비스 점검 모드가 활성화되었습니다.');
+      } else {
+        alert('서비스 점검 모드가 비활성화되었습니다.');
+      }
+    } catch (error) {
+      console.error('점검 모드 토글 실패:', error);
+      alert(`점검 모드 설정 실패: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 점검 메시지 업데이트
+  const handleMaintenanceMessageUpdate = async (message) => {
+    try {
+      setSaving(true);
+      const updatedSettings = {
+        ...settings,
+        maintenanceMode: {
+          ...settings.maintenanceMode,
+          message: message
+        }
+      };
+      
+      await manageSystemSettings.updateSettings(updatedSettings);
+      setSettings(updatedSettings);
+    } catch (error) {
+      console.error('점검 메시지 업데이트 실패:', error);
+      alert(`점검 메시지 업데이트 실패: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // 구독 시스템 마이그레이션
   const handleSubscriptionMigration = async () => {
     if (!confirm('구독 시스템 마이그레이션을 실행하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
@@ -169,15 +223,10 @@ function SystemSettings() {
       return;
     }
 
+    setSaving(true);
     try {
-      setSaving(true);
-      
       const result = await dataMigration.migrateCommentSystem();
-      
-      if (result.success) {
-        alert(`댓글 시스템 마이그레이션 완료! ${result.updatedNotesCount}개의 노트에서 ${result.updatedCommentsCount}개의 댓글이 업데이트되었습니다.`);
-      }
-      
+      alert(`댓글 시스템 마이그레이션 완료! ${result.updatedNotesCount}개의 노트에서 ${result.updatedCommentsCount}개의 댓글이 업데이트되었습니다.`);
     } catch (error) {
       console.error('댓글 시스템 마이그레이션 실패:', error);
       alert('마이그레이션 중 오류가 발생했습니다: ' + error.message);
@@ -186,8 +235,27 @@ function SystemSettings() {
     }
   };
 
+  // 썸네일 시스템 마이그레이션
+  const handleThumbnailMigration = async () => {
+    if (!confirm('썸네일 시스템 마이그레이션을 실행하시겠습니까? 기존 노트의 image 필드가 thumbnail 필드로 복사됩니다.')) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await dataMigration.migrateThumbnailSystem();
+      alert(`썸네일 시스템 마이그레이션 완료!\n총 노트: ${result.totalNotes}개\n업데이트: ${result.updatedNotesCount}개\n건너뛴 노트: ${result.skippedNotesCount}개\n오류: ${result.errorCount}개`);
+    } catch (error) {
+      console.error('썸네일 시스템 마이그레이션 실패:', error);
+      alert('마이그레이션 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'security', title: '보안 정책', icon: FiShield },
+    { id: 'maintenance', title: '서비스 점검', icon: FiSettings },
     { id: 'ip', title: 'IP 차단', icon: FiGlobe },
     { id: 'keywords', title: '키워드 필터', icon: FiFilter },
     { id: 'migration', title: '데이터 마이그레이션', icon: FiSettings }
@@ -228,9 +296,7 @@ function SystemSettings() {
 
       {/* 보안 정책 탭 */}
       {activeTab === 'security' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div
           className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
         >
           <div className="flex items-center justify-between mb-6">
@@ -342,14 +408,142 @@ function SystemSettings() {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
+      )}
+
+      {/* 서비스 점검 탭 */}
+      {activeTab === 'maintenance' && (
+        <div
+          className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
+        >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className={`text-lg font-semibold ${currentTheme?.textColor || 'text-gray-900'}`}>
+              서비스 점검 관리
+            </h3>
+            <div className="flex items-center space-x-3">
+              <span className={`text-sm ${currentTheme?.textColor || 'text-gray-600'}`}>
+                현재 상태:
+              </span>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                settings.maintenanceMode?.enabled 
+                  ? 'bg-red-100 text-red-800' 
+                  : 'bg-green-100 text-green-800'
+              }`}>
+                {settings.maintenanceMode?.enabled ? '점검 중' : '정상 운영'}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* 점검 모드 토글 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h4 className={`font-medium ${currentTheme?.textColor || 'text-gray-900'}`}>
+                    <FiTool className="inline w-5 h-5 mr-2" />
+                    서비스 점검 모드
+                  </h4>
+                  <p className={`text-sm mt-1 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                    점검 모드 활성화 시 모든 사용자에게 점검 페이지가 표시됩니다.
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleMaintenanceToggle(!settings.maintenanceMode?.enabled)}
+                  disabled={saving}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    settings.maintenanceMode?.enabled ? 'bg-red-600' : 'bg-gray-200'
+                  } ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.maintenanceMode?.enabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 점검 시작 시간 표시 */}
+              {settings.maintenanceMode?.enabled && settings.maintenanceMode?.startTime && (
+                <div className={`text-sm ${currentTheme?.textColor || 'text-gray-600'}`}>
+                  <FiClock className="inline w-4 h-4 mr-1" />
+                  점검 시작: {new Date(settings.maintenanceMode.startTime).toLocaleString()}
+                </div>
+              )}
+            </div>
+
+            {/* 점검 메시지 설정 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                점검 안내 메시지
+              </h4>
+              <textarea
+                value={settings.maintenanceMode?.message || '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.'}
+                onChange={(e) => {
+                  const newSettings = {
+                    ...settings,
+                    maintenanceMode: {
+                      ...settings.maintenanceMode,
+                      message: e.target.value
+                    }
+                  };
+                  setSettings(newSettings);
+                }}
+                onBlur={(e) => handleMaintenanceMessageUpdate(e.target.value)}
+                rows={3}
+                className={`w-full px-3 py-2 rounded-lg border resize-none ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-300'} ${currentTheme?.textColor || 'text-gray-900'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                placeholder="사용자에게 표시될 점검 안내 메시지를 입력하세요"
+              />
+              <p className={`text-xs mt-2 ${currentTheme?.textColor || 'text-gray-500'}`}>
+                이 메시지는 점검 페이지에서 사용자에게 표시됩니다.
+              </p>
+            </div>
+
+            {/* 점검 예상 종료 시간 설정 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                예상 종료 시간 (선택사항)
+              </h4>
+              <input
+                type="datetime-local"
+                value={settings.maintenanceMode?.estimatedEndTime ? 
+                  new Date(settings.maintenanceMode.estimatedEndTime).toISOString().slice(0, 16) : ''}
+                onChange={(e) => {
+                  const newSettings = {
+                    ...settings,
+                    maintenanceMode: {
+                      ...settings.maintenanceMode,
+                      estimatedEndTime: e.target.value ? new Date(e.target.value) : null
+                    }
+                  };
+                  setSettings(newSettings);
+                  handleMaintenanceMessageUpdate(newSettings.maintenanceMode.message);
+                }}
+                className={`w-full px-3 py-2 rounded-lg border ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-300'} ${currentTheme?.textColor || 'text-gray-900'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+              />
+              <p className={`text-xs mt-2 ${currentTheme?.textColor || 'text-gray-500'}`}>
+                사용자에게 점검 종료 예상 시간을 안내할 수 있습니다.
+              </p>
+            </div>
+
+            {/* 주의사항 */}
+            <div className={`p-4 rounded-lg ${currentTheme?.inputBg || 'bg-yellow-50'} border ${currentTheme?.inputBorder || 'border-yellow-200'}`}>
+              <h4 className={`font-medium mb-2 ${currentTheme?.textColor || 'text-yellow-800'}`}>
+                ⚠️ 주의사항
+              </h4>
+              <ul className={`text-sm space-y-1 ${currentTheme?.textColor || 'text-yellow-700'}`}>
+                <li>• 점검 모드 활성화 시 관리자를 제외한 모든 사용자가 서비스를 이용할 수 없습니다.</li>
+                <li>• 점검 중에도 관리자는 모든 기능에 접근할 수 있습니다.</li>
+                <li>• 점검 모드는 즉시 적용되며, 현재 접속 중인 사용자들도 영향을 받습니다.</li>
+                <li>• 점검 완료 후 반드시 점검 모드를 비활성화해주세요.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* IP 차단 탭 */}
       {activeTab === 'ip' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div
           className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
         >
           <h3 className={`text-lg font-semibold mb-6 ${currentTheme?.textColor || 'text-gray-900'}`}>
@@ -414,14 +608,12 @@ function SystemSettings() {
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* 키워드 필터 탭 */}
       {activeTab === 'keywords' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div
           className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
         >
           <h3 className={`text-lg font-semibold mb-6 ${currentTheme?.textColor || 'text-gray-900'}`}>
@@ -486,14 +678,12 @@ function SystemSettings() {
               </p>
             </div>
           )}
-        </motion.div>
+        </div>
       )}
 
       {/* 데이터 마이그레이션 탭 */}
       {activeTab === 'migration' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div
           className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
         >
           <h3 className={`text-lg font-semibold mb-6 ${currentTheme?.textColor || 'text-gray-900'}`}>
@@ -570,6 +760,29 @@ function SystemSettings() {
               </div>
             </div>
 
+            {/* 썸네일 시스템 마이그레이션 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                썸네일 시스템 마이그레이션
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                기존 노트의 image 필드가 thumbnail 필드로 복사됩니다.
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleThumbnailMigration}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-pink-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '마이그레이션 중...' : '썸네일 시스템 마이그레이션 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  ⚠️ 이 작업은 되돌릴 수 없습니다.
+                </span>
+              </div>
+            </div>
+
             {/* 마이그레이션 상태 */}
             <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-blue-50'} ${currentTheme?.inputBorder || 'border-blue-200'}`}>
               <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-blue-900'}`}>
@@ -579,12 +792,13 @@ function SystemSettings() {
                 <li>• 구독 시스템: 모든 사용자에게 subscriberCount: 0, subscriptionCount: 0 추가</li>
                 <li>• 알림 시스템: notifications 컬렉션 생성 및 기본 설정</li>
                 <li>• 댓글 시스템: 기존 댓글에 id, replies, replyCount 필드 추가</li>
+                <li>• 썸네일 시스템: 기존 노트의 image 필드를 thumbnail 필드로 복사</li>
                 <li>• 마이그레이션 전 데이터베이스 백업을 권장합니다</li>
                 <li>• 마이그레이션 중에는 서비스 이용이 제한될 수 있습니다</li>
               </ul>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
     </div>
   );

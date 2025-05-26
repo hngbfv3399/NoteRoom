@@ -6,15 +6,35 @@
 import { collection, query, where, orderBy, limit, getDocs, doc, updateDoc, deleteDoc, getDoc, addDoc, Timestamp, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { sanitizeLogData } from './security';
+import { auth } from '@/services/firebase';
 
 // 관리자 권한 확인
 export const checkAdminPermission = async (userUid) => {
   try {
+    if (!userUid) {
+      return false;
+    }
+    
     const userDoc = await getDoc(doc(db, 'users', userUid));
+    
+    if (!userDoc.exists()) {
+      return false;
+    }
+    
     const userData = userDoc.data();
-    return userData?.role === 'admin' || userData?.isAdmin === true;
+    const isAdmin = userData?.role === 'admin' || userData?.isAdmin === true;
+    
+    return isAdmin;
   } catch (error) {
     console.error('관리자 권한 확인 실패:', error);
+    
+    // 네트워크 오류나 권한 오류 시 구체적인 로그
+    if (error.code === 'permission-denied') {
+      console.error('Firestore 권한 거부 - 사용자 문서 접근 불가');
+    } else if (error.code === 'unavailable') {
+      console.error('Firestore 서비스 사용 불가');
+    }
+    
     return false;
   }
 };
@@ -24,7 +44,14 @@ export const isCurrentUserAdmin = async (user) => {
   if (!user || !user.uid) {
     return false;
   }
-  return await checkAdminPermission(user.uid);
+  
+  try {
+    const result = await checkAdminPermission(user.uid);
+    return result;
+  } catch (error) {
+    console.error('관리자 권한 확인 중 오류:', error);
+    return false;
+  }
 };
 
 // 보안 이벤트 로깅
@@ -623,25 +650,114 @@ export const manageSystemSettings = {
   getSettings: async () => {
     try {
       const settingsDoc = await getDoc(doc(db, 'systemSettings', 'main'));
-      return settingsDoc.exists() ? settingsDoc.data() : {};
+      if (settingsDoc.exists()) {
+        return settingsDoc.data();
+      } else {
+        // 문서가 없으면 기본 설정으로 생성 (관리자만)
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const isAdmin = await checkAdminPermission(currentUser.uid);
+          if (isAdmin) {
+            const defaultSettings = {
+              maintenanceMode: {
+                enabled: false,
+                message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+                startTime: null,
+                estimatedEndTime: null
+              },
+              createdAt: Timestamp.now(),
+              updatedAt: Timestamp.now()
+            };
+            
+            // 기본 설정 문서 생성
+            await setDoc(doc(db, 'systemSettings', 'main'), defaultSettings);
+            return defaultSettings;
+          }
+        }
+        
+        // 관리자가 아니거나 로그인하지 않은 경우 기본값 반환
+        return {
+          maintenanceMode: {
+            enabled: false,
+            message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+            startTime: null,
+            estimatedEndTime: null
+          }
+        };
+      }
     } catch (error) {
       console.error('시스템 설정 조회 실패:', error);
-      return {};
+      
+      // 권한 오류인 경우 기본값 반환 (일반 사용자용)
+      if (error.code === 'permission-denied') {
+        console.warn('시스템 설정 접근 권한이 없습니다. 기본값을 사용합니다.');
+        return {
+          maintenanceMode: {
+            enabled: false,
+            message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+            startTime: null,
+            estimatedEndTime: null
+          }
+        };
+      }
+      
+      // 네트워크 오류 등 기타 오류
+      if (error.code === 'unavailable') {
+        console.warn('네트워크 연결을 확인해주세요.');
+      }
+      
+      // 기본값 반환
+      return {
+        maintenanceMode: {
+          enabled: false,
+          message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+          startTime: null,
+          estimatedEndTime: null
+        }
+      };
     }
   },
 
   updateSettings: async (settings) => {
     try {
-      await updateDoc(doc(db, 'systemSettings', 'main'), {
+      // 현재 사용자가 관리자인지 확인
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      // 관리자 권한 확인 - currentUser 객체를 전달
+      const isAdmin = await isCurrentUserAdmin(currentUser);
+      
+      if (!isAdmin) {
+        throw new Error('관리자 권한이 필요합니다.');
+      }
+
+      // 문서가 존재하는지 확인하고 없으면 생성
+      const settingsRef = doc(db, 'systemSettings', 'main');
+      const settingsDoc = await getDoc(settingsRef);
+      
+      const updatedSettings = {
         ...settings,
         updatedAt: Timestamp.now()
-      });
+      };
+
+      if (settingsDoc.exists()) {
+        // 문서가 존재하면 업데이트
+        await updateDoc(settingsRef, updatedSettings);
+      } else {
+        // 문서가 없으면 생성
+        await setDoc(settingsRef, {
+          ...updatedSettings,
+          createdAt: Timestamp.now()
+        });
+      }
 
       await logSecurityEvent('SYSTEM_SETTINGS_UPDATED', { settings });
       return true;
     } catch (error) {
       console.error('시스템 설정 업데이트 실패:', error);
-      return false;
+      throw error;
     }
   }
 };
@@ -813,6 +929,70 @@ export const dataMigration = {
     }
   },
 
+  // 썸네일 시스템 마이그레이션
+  async migrateThumbnailSystem() {
+    try {
+      console.log('썸네일 시스템 마이그레이션 시작...');
+      
+      const notesRef = collection(db, 'notes');
+      const snapshot = await getDocs(notesRef);
+      
+      const batch = writeBatch(db);
+      let updatedNotesCount = 0;
+      let skippedNotesCount = 0;
+      let errorCount = 0;
+      
+      snapshot.docs.forEach((noteDoc) => {
+        try {
+          const noteData = noteDoc.data();
+          
+          // 이미 thumbnail 필드가 있는 경우 건너뛰기
+          if (noteData.thumbnail !== undefined) {
+            skippedNotesCount++;
+            return;
+          }
+          
+          // image 필드가 있는 경우 thumbnail로 복사
+          if (noteData.image) {
+            const noteRef = doc(db, 'notes', noteDoc.id);
+            batch.update(noteRef, {
+              thumbnail: noteData.image,
+              thumbnailMigratedAt: serverTimestamp()
+            });
+            updatedNotesCount++;
+          } else {
+            // image 필드가 없는 경우 null로 설정
+            const noteRef = doc(db, 'notes', noteDoc.id);
+            batch.update(noteRef, {
+              thumbnail: null,
+              thumbnailMigratedAt: serverTimestamp()
+            });
+            updatedNotesCount++;
+          }
+        } catch (error) {
+          console.error(`노트 ${noteDoc.id} 마이그레이션 실패:`, error);
+          errorCount++;
+        }
+      });
+      
+      if (updatedNotesCount > 0) {
+        await batch.commit();
+        console.log(`썸네일 마이그레이션 완료: ${updatedNotesCount}개 노트 업데이트`);
+      }
+      
+      return { 
+        success: true, 
+        updatedNotesCount, 
+        skippedNotesCount,
+        errorCount,
+        totalNotes: snapshot.docs.length
+      };
+    } catch (error) {
+      console.error('썸네일 시스템 마이그레이션 실패:', error);
+      throw error;
+    }
+  },
+
   // 마이그레이션 상태 확인
   async checkMigrationStatus() {
     try {
@@ -831,14 +1011,146 @@ export const dataMigration = {
         }
       });
       
+      // 썸네일 마이그레이션 상태도 확인
+      const notesRef = collection(db, 'notes');
+      const notesSnapshot = await getDocs(notesRef);
+      
+      let totalNotes = 0;
+      let thumbnailMigratedNotes = 0;
+      
+      notesSnapshot.docs.forEach((noteDoc) => {
+        const noteData = noteDoc.data();
+        totalNotes++;
+        
+        if (noteData.thumbnail !== undefined) {
+          thumbnailMigratedNotes++;
+        }
+      });
+      
       return {
-        totalUsers,
-        migratedUsers,
-        needsMigration: totalUsers - migratedUsers,
-        migrationComplete: migratedUsers === totalUsers
+        users: {
+          totalUsers,
+          migratedUsers,
+          needsMigration: totalUsers - migratedUsers,
+          migrationComplete: migratedUsers === totalUsers
+        },
+        thumbnails: {
+          totalNotes,
+          thumbnailMigratedNotes,
+          needsMigration: totalNotes - thumbnailMigratedNotes,
+          migrationComplete: thumbnailMigratedNotes === totalNotes
+        }
       };
     } catch (error) {
       console.error('마이그레이션 상태 확인 실패:', error);
+      throw error;
+    }
+  }
+};
+
+// 서비스 점검 모드 관리
+export const maintenanceMode = {
+  // 점검 모드 상태 확인
+  isMaintenanceMode: async () => {
+    try {
+      const settings = await manageSystemSettings.getSettings();
+      return settings.maintenanceMode?.enabled || false;
+    } catch (error) {
+      console.error('점검 모드 상태 확인 실패:', error);
+      // 오류 발생 시 점검 모드가 아닌 것으로 처리
+      return false;
+    }
+  },
+
+  // 점검 모드 정보 조회
+  getMaintenanceInfo: async () => {
+    try {
+      const settings = await manageSystemSettings.getSettings();
+      return settings.maintenanceMode || {
+        enabled: false,
+        message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+        startTime: null,
+        estimatedEndTime: null
+      };
+    } catch (error) {
+      console.error('점검 모드 정보 조회 실패:', error);
+      // 기본값 반환
+      return {
+        enabled: false,
+        message: '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+        startTime: null,
+        estimatedEndTime: null
+      };
+    }
+  },
+
+  // 점검 모드 활성화
+  enableMaintenance: async (message, estimatedEndTime) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      // 관리자 권한 확인을 더 안정적으로 처리
+      const isAdmin = await isCurrentUserAdmin(currentUser);
+      
+      if (!isAdmin) {
+        throw new Error('관리자 권한이 필요합니다.');
+      }
+      
+      const settings = await manageSystemSettings.getSettings();
+      const updatedSettings = {
+        ...settings,
+        maintenanceMode: {
+          enabled: true,
+          message: message || '서비스 점검 중입니다. 잠시 후 다시 이용해주세요.',
+          startTime: new Date(),
+          estimatedEndTime: estimatedEndTime || null
+        }
+      };
+
+      await manageSystemSettings.updateSettings(updatedSettings);
+      await logSecurityEvent('MAINTENANCE_MODE_ENABLED', { message, estimatedEndTime });
+      
+      return true;
+    } catch (error) {
+      console.error('점검 모드 활성화 실패:', error);
+      throw error;
+    }
+  },
+
+  // 점검 모드 비활성화
+  disableMaintenance: async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      // 관리자 권한 확인을 더 안정적으로 처리
+      const isAdmin = await isCurrentUserAdmin(currentUser);
+      
+      if (!isAdmin) {
+        throw new Error('관리자 권한이 필요합니다.');
+      }
+
+      const settings = await manageSystemSettings.getSettings();
+      const updatedSettings = {
+        ...settings,
+        maintenanceMode: {
+          ...settings.maintenanceMode,
+          enabled: false,
+          endTime: new Date()
+        }
+      };
+
+      await manageSystemSettings.updateSettings(updatedSettings);
+      await logSecurityEvent('MAINTENANCE_MODE_DISABLED', {});
+      
+      return true;
+    } catch (error) {
+      console.error('점검 모드 비활성화 실패:', error);
       throw error;
     }
   }

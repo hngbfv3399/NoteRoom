@@ -14,13 +14,14 @@ import {
   limit,
   startAfter,
   Timestamp,
-  deleteDoc
+  deleteDoc,
+  where
 } from "firebase/firestore";
 import { auth, db, storage } from "../services/firebase";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { createEmotionDistribution, createEmotionTracking } from "./emotionConstants";
-import { createCommentNotification, createNewNoteNotification } from "./notificationUtils";
+import { createCommentNotification, createNewNoteNotification, extractMentions, createMentionNotification } from "./notificationUtils";
 
 export const addCommentToNote = async (noteId, commentContent) => {
   const currentUser = auth.currentUser;
@@ -72,6 +73,45 @@ export const addCommentToNote = async (noteId, commentContent) => {
       // 알림 생성 실패해도 댓글 작성은 성공으로 처리
       // 토스트 알림은 createCommentNotification 내부에서 처리됨
     }
+
+    // 멘션 처리
+    try {
+      const mentions = extractMentions(commentContent.trim());
+      if (mentions.length > 0) {
+        // 멘션된 사용자들의 ID 찾기
+        for (const mentionedUsername of mentions) {
+          try {
+            // 사용자명으로 사용자 찾기
+            const usersQuery = query(
+              collection(db, 'users'),
+              where('displayName', '==', mentionedUsername),
+              limit(1)
+            );
+            const usersSnapshot = await getDocs(usersQuery);
+            
+            if (!usersSnapshot.empty) {
+              const mentionedUserDoc = usersSnapshot.docs[0];
+              const mentionedUserId = mentionedUserDoc.id;
+              
+              // 자신을 멘션한 경우나 노트 작성자를 멘션한 경우는 제외 (이미 다른 알림이 있음)
+              if (mentionedUserId !== currentUser.uid && mentionedUserId !== (noteData.userUid || noteData.userId)) {
+                await createMentionNotification(
+                  noteId,
+                  'note',
+                  mentionedUserId,
+                  currentUser.uid,
+                  commentContent.trim()
+                );
+              }
+            }
+          } catch (mentionError) {
+            console.warn(`멘션 처리 실패 (@${mentionedUsername}):`, mentionError);
+          }
+        }
+      }
+    } catch (mentionError) {
+      console.warn("멘션 처리 실패:", mentionError);
+    }
   } catch (error) {
     console.error("댓글 추가 실패:", error);
     // 토스트 알림 표시
@@ -102,13 +142,27 @@ export const saveNoteToFirestore = async (noteData) => {
 
   const noteWithUserId = {
     ...rest,
-    userId: currentUser.uid,
+    userUid: currentUser.uid,
     author: userData?.displayName || currentUser.displayName || "닉네임 없음",
     createdAt: serverTimestamp(),
     views: 0,
+    likes: 0,
     comment: [], // 댓글 배열 초기화
     commentCount: 0, // 댓글 수 초기화
   };
+
+  // 디버깅: 실제 저장될 데이터 로그
+  console.log("=== 저장될 노트 데이터 ===");
+  console.log("noteWithUserId:", JSON.stringify(noteWithUserId, null, 2));
+  console.log("필드 목록:", Object.keys(noteWithUserId));
+  console.log("필수 필드 확인:");
+  console.log("- userUid:", noteWithUserId.userUid);
+  console.log("- title:", noteWithUserId.title);
+  console.log("- content:", noteWithUserId.content);
+  console.log("- category:", noteWithUserId.category);
+  console.log("- likes:", noteWithUserId.likes);
+  console.log("- views:", noteWithUserId.views);
+  console.log("- commentCount:", noteWithUserId.commentCount);
 
   try {
     // 노트 저장
@@ -119,18 +173,56 @@ export const saveNoteToFirestore = async (noteData) => {
       noteCount: increment(1)
     });
     
-    // 구독자들에게 새 노트 알림 생성
+    // 새 노트 알림 생성 (구독자들에게)
     try {
       await createNewNoteNotification(
         docRef.id,
         currentUser.uid,
-        noteData.title,
-        noteData.content
+        noteWithUserId.title,
+        noteWithUserId.content
       );
     } catch (notificationError) {
       console.warn("새 노트 알림 생성 실패:", notificationError);
       // 알림 생성 실패해도 노트 작성은 성공으로 처리
-      // 토스트 알림은 createNewNoteNotification 내부에서 처리됨
+    }
+
+    // 멘션 처리 (노트 내용에서)
+    try {
+      const mentions = extractMentions(noteWithUserId.content);
+      if (mentions.length > 0) {
+        // 멘션된 사용자들의 ID 찾기
+        for (const mentionedUsername of mentions) {
+          try {
+            // 사용자명으로 사용자 찾기
+            const usersQuery = query(
+              collection(db, 'users'),
+              where('displayName', '==', mentionedUsername),
+              limit(1)
+            );
+            const usersSnapshot = await getDocs(usersQuery);
+            
+            if (!usersSnapshot.empty) {
+              const mentionedUserDoc = usersSnapshot.docs[0];
+              const mentionedUserId = mentionedUserDoc.id;
+              
+              // 자신을 멘션한 경우는 제외
+              if (mentionedUserId !== currentUser.uid) {
+                await createMentionNotification(
+                  docRef.id,
+                  'note',
+                  mentionedUserId,
+                  currentUser.uid,
+                  noteWithUserId.content
+                );
+              }
+            }
+          } catch (mentionError) {
+            console.warn(`멘션 처리 실패 (@${mentionedUsername}):`, mentionError);
+          }
+        }
+      }
+    } catch (mentionError) {
+      console.warn("멘션 처리 실패:", mentionError);
     }
     
     console.log("노트 저장 완료 및 사용자 noteCount 증가:", docRef.id);
@@ -185,7 +277,7 @@ export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId
 
     // 클라이언트 사이드에서 userId 필터링
     if (userId) {
-      notes = notes.filter(note => note.userId === userId);
+      notes = notes.filter(note => note.userUid === userId || note.userId === userId); // 기존 데이터 호환성을 위해 둘 다 확인
       // 원하는 페이지 크기로 제한
       notes = notes.slice(0, pageSize);
     }
@@ -355,19 +447,19 @@ export const uploadImageToFirebase = async (file) => {
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("로그인이 필요합니다.");
 
-  // 파일 보안 검증
-  // 파일 크기 검증 (5MB 제한)
+  // 파일 보안 검증 강화
+  // 1. 파일 크기 검증 (5MB 제한)
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("이미지 크기는 5MB를 초과할 수 없습니다.");
   }
 
-  // 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
+  // 2. 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
   if (!allowedTypes.includes(file.type)) {
     throw new Error("지원하지 않는 파일 형식입니다. (JPG, PNG, GIF, WebP만 허용)");
   }
 
-  // 파일 확장자 검증
+  // 3. 파일 확장자 검증
   const fileName = file.name.toLowerCase();
   const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
   const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
@@ -375,19 +467,43 @@ export const uploadImageToFirebase = async (file) => {
     throw new Error("허용되지 않는 파일 확장자입니다.");
   }
 
-  // 파일명 보안 검증 (경로 순회 공격 방지)
+  // 4. 파일명 보안 검증 (경로 순회 공격 방지)
   if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
     throw new Error("유효하지 않은 파일명입니다.");
   }
 
-  // 안전한 파일명 생성 (특수문자 제거)
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  // 5. 파일 헤더 검증 (매직 넘버 확인)
+  const fileHeader = await readFileHeader(file);
+  if (!isValidImageHeader(fileHeader, file.type)) {
+    throw new Error("파일 형식이 올바르지 않습니다. 실제 이미지 파일을 업로드해주세요.");
+  }
+
+  // 6. 파일 내용 크기 검증 (빈 파일 방지)
+  if (file.size < 100) { // 100바이트 미만은 유효한 이미지가 아님
+    throw new Error("파일이 너무 작습니다. 유효한 이미지를 업로드해주세요.");
+  }
+
+  // 7. 안전한 파일명 생성 (특수문자 제거 및 정규화)
+  const safeFileName = sanitizeFileName(file.name);
   const timestamp = Date.now();
-  const uniqueFileName = `${safeFileName}-${timestamp}`;
+  const randomString = Math.random().toString(36).substring(2, 15);
+  const uniqueFileName = `${timestamp}_${randomString}_${safeFileName}`;
 
   try {
-    const storageRef = ref(storage, `noteImages/${uniqueFileName}`);
-    await uploadBytes(storageRef, file);
+    const storageRef = ref(storage, `notes/${currentUser.uid}/${uniqueFileName}`);
+    
+    // 메타데이터 설정 (보안 강화)
+    const metadata = {
+      contentType: file.type,
+      cacheControl: 'public, max-age=31536000', // 1년 캐시
+      customMetadata: {
+        uploadedBy: currentUser.uid,
+        uploadedAt: new Date().toISOString(),
+        originalName: file.name.substring(0, 100) // 원본 파일명 길이 제한
+      }
+    };
+
+    await uploadBytes(storageRef, file, metadata);
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -400,10 +516,65 @@ export const uploadImageToFirebase = async (file) => {
       throw new Error("저장 공간이 부족합니다.");
     } else if (error.code === 'storage/invalid-format') {
       throw new Error("지원하지 않는 이미지 형식입니다.");
+    } else if (error.code === 'storage/retry-limit-exceeded') {
+      throw new Error("업로드 재시도 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
     }
     
     throw new Error("이미지 업로드에 실패했습니다.");
   }
+};
+
+// 파일 헤더 읽기 함수
+const readFileHeader = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const arrayBuffer = e.target.result;
+      const uint8Array = new Uint8Array(arrayBuffer);
+      resolve(uint8Array);
+    };
+    reader.onerror = () => reject(new Error("파일 읽기 실패"));
+    reader.readAsArrayBuffer(file.slice(0, 12)); // 처음 12바이트만 읽기
+  });
+};
+
+// 이미지 헤더 검증 함수 (매직 넘버 확인)
+const isValidImageHeader = (header, mimeType) => {
+  const headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  switch (mimeType) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return headerHex.startsWith('ffd8ff'); // JPEG 매직 넘버
+    case 'image/png':
+      return headerHex.startsWith('89504e47'); // PNG 매직 넘버
+    case 'image/gif':
+      return headerHex.startsWith('474946'); // GIF 매직 넘버
+    case 'image/webp':
+      return headerHex.includes('57454250'); // WebP 매직 넘버 (RIFF 컨테이너 내)
+    default:
+      return false;
+  }
+};
+
+// 파일명 정규화 함수
+const sanitizeFileName = (fileName) => {
+  // 1. 확장자 분리
+  const lastDotIndex = fileName.lastIndexOf('.');
+  const name = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+  const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '';
+  
+  // 2. 파일명 정규화 (특수문자 제거, 공백을 언더스코어로 변경)
+  const sanitizedName = name
+    .replace(/[^a-zA-Z0-9가-힣\s.-]/g, '') // 허용된 문자만 유지
+    .replace(/\s+/g, '_') // 공백을 언더스코어로 변경
+    .replace(/_{2,}/g, '_') // 연속된 언더스코어 제거
+    .substring(0, 50); // 파일명 길이 제한
+  
+  // 3. 빈 파일명 방지
+  const finalName = sanitizedName || 'image';
+  
+  return finalName + extension.toLowerCase();
 };
 
 // 프로필 이미지 업로드 함수 추가
@@ -419,19 +590,19 @@ export const uploadProfileImageToFirebase = async (file, userId) => {
     throw new Error("본인의 프로필만 수정할 수 있습니다.");
   }
 
-  // 파일 보안 검증
-  // 파일 크기 검증 (5MB 제한)
+  // 파일 보안 검증 강화
+  // 1. 파일 크기 검증 (5MB 제한)
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("이미지 크기는 5MB를 초과할 수 없습니다.");
   }
 
-  // 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
+  // 2. 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
   if (!allowedTypes.includes(file.type)) {
     throw new Error("지원하지 않는 파일 형식입니다. (JPG, PNG, GIF, WebP만 허용)");
   }
 
-  // 파일 확장자 검증
+  // 3. 파일 확장자 검증
   const fileName = file.name.toLowerCase();
   const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
   const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
@@ -439,20 +610,45 @@ export const uploadProfileImageToFirebase = async (file, userId) => {
     throw new Error("허용되지 않는 파일 확장자입니다.");
   }
 
-  // 파일명 보안 검증 (경로 순회 공격 방지)
+  // 4. 파일명 보안 검증 (경로 순회 공격 방지)
   if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
     throw new Error("유효하지 않은 파일명입니다.");
   }
 
-  // 안전한 파일명 생성 (특수문자 제거)
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  // 5. 파일 헤더 검증 (매직 넘버 확인)
+  const fileHeader = await readFileHeader(file);
+  if (!isValidImageHeader(fileHeader, file.type)) {
+    throw new Error("파일 형식이 올바르지 않습니다. 실제 이미지 파일을 업로드해주세요.");
+  }
+
+  // 6. 파일 내용 크기 검증 (빈 파일 방지)
+  if (file.size < 100) { // 100바이트 미만은 유효한 이미지가 아님
+    throw new Error("파일이 너무 작습니다. 유효한 이미지를 업로드해주세요.");
+  }
+
+  // 7. 안전한 파일명 생성 (특수문자 제거 및 정규화)
+  const safeFileName = sanitizeFileName(file.name);
   const timestamp = Date.now();
-  const uniqueFileName = `profile-${timestamp}-${safeFileName}`;
+  const randomString = Math.random().toString(36).substring(2, 15);
+  const uniqueFileName = `profile-${timestamp}-${randomString}-${safeFileName}`;
 
   try {
     // 프로필 이미지는 별도 폴더에 저장
     const storageRef = ref(storage, `profiles/${userId}/${uniqueFileName}`);
-    await uploadBytes(storageRef, file);
+    
+    // 메타데이터 설정 (보안 강화)
+    const metadata = {
+      contentType: file.type,
+      cacheControl: 'public, max-age=31536000', // 1년 캐시
+      customMetadata: {
+        uploadedBy: currentUser.uid,
+        uploadedAt: new Date().toISOString(),
+        originalName: file.name.substring(0, 100), // 원본 파일명 길이 제한
+        imageType: 'profile'
+      }
+    };
+
+    await uploadBytes(storageRef, file, metadata);
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -465,6 +661,8 @@ export const uploadProfileImageToFirebase = async (file, userId) => {
       throw new Error("저장 공간이 부족합니다.");
     } else if (error.code === 'storage/invalid-format') {
       throw new Error("지원하지 않는 이미지 형식입니다.");
+    } else if (error.code === 'storage/retry-limit-exceeded') {
+      throw new Error("업로드 재시도 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
     }
     
     throw new Error("프로필 이미지 업로드에 실패했습니다.");
@@ -491,7 +689,10 @@ export const updateUserNoteCount = async (userId) => {
     );
     
     const querySnapshot = await getDocs(notesQuery);
-    const userNotes = querySnapshot.docs.filter(doc => doc.data().userId === userId);
+    const userNotes = querySnapshot.docs.filter(doc => {
+      const data = doc.data();
+      return data.userUid === userId || data.userId === userId; // 기존 데이터 호환성을 위해 둘 다 확인
+    });
     const actualNoteCount = userNotes.length;
     
     // 사용자 문서의 noteCount 업데이트
@@ -544,6 +745,11 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
     throw new Error("로그인이 필요합니다.");
   }
 
+  console.log("=== 노트 업데이트 디버깅 ===");
+  console.log("noteId:", noteId);
+  console.log("currentUser.uid:", currentUser.uid);
+  console.log("updateData:", JSON.stringify(updateData, null, 2));
+
   try {
     // 먼저 노트가 존재하고 현재 사용자의 노트인지 확인
     const noteDocRef = doc(db, "notes", noteId);
@@ -554,7 +760,16 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
     }
     
     const noteData = noteDoc.data();
-    if (noteData.userId !== currentUser.uid) {
+    console.log("기존 노트 데이터:", JSON.stringify(noteData, null, 2));
+    console.log("기존 노트의 userUid:", noteData.userUid);
+    console.log("기존 노트의 userId:", noteData.userId);
+    
+    // userUid 필드로 확인 (Firestore 규칙과 일치)
+    if (noteData.userUid !== currentUser.uid && noteData.userId !== currentUser.uid) {
+      console.error("권한 오류: 노트 소유자가 아님");
+      console.error("노트의 userUid:", noteData.userUid);
+      console.error("노트의 userId:", noteData.userId);
+      console.error("현재 사용자 uid:", currentUser.uid);
       throw new Error("본인의 노트만 수정할 수 있습니다.");
     }
     
@@ -564,11 +779,16 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
       updatedAt: serverTimestamp()
     };
     
+    console.log("최종 업데이트 데이터:", JSON.stringify(updateDataWithTimestamp, null, 2));
+    console.log("업데이트할 필드 목록:", Object.keys(updateDataWithTimestamp));
+    
     await updateDoc(noteDocRef, updateDataWithTimestamp);
     console.log("노트 업데이트 완료:", noteId);
     return true;
   } catch (error) {
     console.error("노트 업데이트 실패:", error);
+    console.error("에러 코드:", error.code);
+    console.error("에러 메시지:", error.message);
     throw error;
   }
 };
@@ -640,6 +860,45 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
       console.warn("대댓글 알림 생성 실패:", notificationError);
       // 알림 생성 실패해도 대댓글 작성은 성공으로 처리
     }
+
+    // 멘션 처리
+    try {
+      const mentions = extractMentions(replyContent.trim());
+      if (mentions.length > 0) {
+        // 멘션된 사용자들의 ID 찾기
+        for (const mentionedUsername of mentions) {
+          try {
+            // 사용자명으로 사용자 찾기
+            const usersQuery = query(
+              collection(db, 'users'),
+              where('displayName', '==', mentionedUsername),
+              limit(1)
+            );
+            const usersSnapshot = await getDocs(usersQuery);
+            
+            if (!usersSnapshot.empty) {
+              const mentionedUserDoc = usersSnapshot.docs[0];
+              const mentionedUserId = mentionedUserDoc.id;
+              
+              // 자신을 멘션한 경우나 댓글 작성자를 멘션한 경우는 제외 (이미 다른 알림이 있음)
+              if (mentionedUserId !== currentUser.uid && mentionedUserId !== targetComment.userUid) {
+                await createMentionNotification(
+                  noteId,
+                  'note',
+                  mentionedUserId,
+                  currentUser.uid,
+                  replyContent.trim()
+                );
+              }
+            }
+          } catch (mentionError) {
+            console.warn(`멘션 처리 실패 (@${mentionedUsername}):`, mentionError);
+          }
+        }
+      }
+    } catch (mentionError) {
+      console.warn("멘션 처리 실패:", mentionError);
+    }
   } catch (error) {
     console.error("대댓글 추가 실패:", error);
     // 토스트 알림 표시
@@ -649,3 +908,95 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
     throw error;
   }
 };
+
+// 디버깅용 테스트 함수
+export const testFirestorePermissions = async () => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.error("사용자가 로그인되어 있지 않습니다.");
+    return;
+  }
+
+  console.log("=== Firestore 권한 테스트 시작 ===");
+  console.log("현재 사용자:", {
+    uid: currentUser.uid,
+    email: currentUser.email,
+    displayName: currentUser.displayName
+  });
+
+  // 테스트 노트 데이터
+  const testNoteData = {
+    userUid: currentUser.uid,
+    title: "테스트 노트",
+    content: "테스트 내용",
+    category: "기타",
+    likes: 0,
+    views: 0,
+    commentCount: 0,
+    comment: [],
+    author: "테스트 사용자",
+    createdAt: serverTimestamp()
+  };
+
+  console.log("테스트 노트 데이터:", JSON.stringify(testNoteData, null, 2));
+
+  try {
+    // 노트 생성 테스트
+    console.log("노트 생성 테스트 시작...");
+    const docRef = await addDoc(collection(db, "notes"), testNoteData);
+    console.log("✅ 노트 생성 성공:", docRef.id);
+
+    // 노트 업데이트 테스트
+    console.log("노트 업데이트 테스트 시작...");
+    await updateDoc(docRef, {
+      title: "업데이트된 테스트 노트",
+      updatedAt: serverTimestamp()
+    });
+    console.log("✅ 노트 업데이트 성공");
+
+    // 노트 삭제 테스트
+    console.log("노트 삭제 테스트 시작...");
+    await deleteDoc(docRef);
+    console.log("✅ 노트 삭제 성공");
+
+    console.log("=== 모든 테스트 통과! ===");
+  } catch (error) {
+    console.error("❌ 테스트 실패:", error);
+    console.error("에러 코드:", error.code);
+    console.error("에러 메시지:", error.message);
+  }
+};
+
+// 기존 노트 데이터 구조 확인 함수
+export const checkExistingNotesStructure = async () => {
+  console.log("=== 기존 노트 데이터 구조 확인 ===");
+  
+  try {
+    const notesQuery = query(
+      collection(db, "notes"),
+      orderBy("createdAt", "desc"),
+      limit(5)
+    );
+    
+    const querySnapshot = await getDocs(notesQuery);
+    
+    querySnapshot.docs.forEach((doc, index) => {
+      const data = doc.data();
+      console.log(`노트 ${index + 1} (ID: ${doc.id}):`);
+      console.log("- userUid:", data.userUid);
+      console.log("- userId:", data.userId);
+      console.log("- title:", data.title);
+      console.log("- 필드 목록:", Object.keys(data));
+      console.log("---");
+    });
+    
+  } catch (error) {
+    console.error("기존 노트 확인 실패:", error);
+  }
+};
+
+// 브라우저 콘솔에서 테스트할 수 있도록 전역으로 노출
+if (typeof window !== 'undefined') {
+  window.testFirestorePermissions = testFirestorePermissions;
+  window.checkExistingNotesStructure = checkExistingNotesStructure;
+}

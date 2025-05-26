@@ -111,7 +111,7 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
         content: editor.getHTML(),
       };
 
-      await updateNoteInFirestore(note.id, note.userId, updateData);
+      await updateNoteInFirestore(note.id, updateData);
       
       // 부모 컴포넌트에 업데이트 알림
       if (onNoteUpdated) {
@@ -139,7 +139,7 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
       setError(null);
       setIsLoading(true);
 
-      await deleteNoteFromFirestore(note.id, note.userId);
+      await deleteNoteFromFirestore(note.id, note.userUid || note.userId);
       
       // 부모 컴포넌트에 삭제 알림
       if (onNoteDeleted) {

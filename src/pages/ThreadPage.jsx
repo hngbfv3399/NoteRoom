@@ -7,13 +7,12 @@
  * - 스냅 스크롤로 한 번에 하나의 노트만 표시
  * - 모바일 터치 스크롤 최적화
  * - 테마 시스템 적용
- * - 성능 최적화 및 메모리 관리
+ * - 성능 최적화 및 메모리 관리 강화
  * 
  * NOTE: 스크롤 가속도 제어로 부드러운 UX 제공
- * TODO: 비디오 자동재생 기능, 키보드 네비게이션
- * FIXME: 메모리 누수 방지 강화
+ * PERFORMANCE: 메모리 누수 방지 및 이벤트 리스너 정리 강화
  */
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useNotesInfinite } from "@/hooks/useNotesInfinite";
 import ThreadSlide from "@/features/ThreadPage/ThreadSlide";
@@ -23,6 +22,7 @@ import { IoRefreshOutline, IoArrowUpOutline } from "react-icons/io5";
 import useMobileHeightFix from "@/hooks/useMobileHeightFix";
 import { AnimatePresence } from "framer-motion";
 import { getThemeClass } from "@/utils/themeHelper";
+import { errorHandlers } from "@/utils/errorHandler";
 import "@/styles/ThreadPage.css";
 import { useLocation } from "react-router-dom";
 import { ROUTES } from '@/constants/routes';
@@ -38,19 +38,23 @@ function ThreadPage() {
     isFetchingNextPage,
     error,
     refetch
-  } = useNotesInfinite(12); // 페이지당 12개 노트로 조정 (더 자연스러운 스크롤)
+  } = useNotesInfinite(12); // 페이지당 12개 노트로 조정
   
-  // DOM 참조
-  const observerRef = useRef(); // Intersection Observer 타겟
-  const containerRef = useRef(); // 스크롤 컨테이너
+  // DOM 참조 - 메모리 누수 방지를 위한 ref 관리
+  const observerRef = useRef(null);
+  const containerRef = useRef(null);
+  const intersectionObserverRef = useRef(null);
+  const touchStartRef = useRef(null);
+  const touchTimeRef = useRef(null);
+  const isVerticalSwipeRef = useRef(false);
   
   // 상태 관리
   const [showScrollTop, setShowScrollTop] = useState(false);
   
-  // 현재 테마 가져오기
+  // 현재 테마 가져오기 - 메모이제이션
   const { current, themes } = useSelector((state) => state.theme);
-  const currentTheme = themes[current];
-  const themeClass = getThemeClass(currentTheme);
+  const currentTheme = useMemo(() => themes[current], [themes, current]);
+  const themeClass = useMemo(() => getThemeClass(currentTheme), [currentTheme]);
   
   // 네비게이션 및 위치 정보
   const location = useLocation();
@@ -68,119 +72,142 @@ function ThreadPage() {
   }, [location.state, refetch]);
 
   // Header + Navbar 높이를 뺀 실제 컨텐츠 높이 계산
-  const getContentHeight = () => {
+  const getContentHeight = useCallback(() => {
     return window.innerHeight - 128; // Header(64px) + Navbar(64px) = 128px
-  };
+  }, []);
 
-  // 스크롤 상태 추적
+  // 스크롤 상태 추적 - 메모리 누수 방지 강화
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
       const scrollTop = container.scrollTop;
-      
-      // 스크롤 시작 시 바로 버튼 숨기기 (50px 이상 스크롤 시)
       setShowScrollTop(scrollTop > 50);
     };
 
+    // passive 옵션으로 성능 최적화
     container.addEventListener('scroll', handleScroll, { passive: true });
+    
     return () => {
-      container.removeEventListener('scroll', handleScroll);
+      // 정리 함수에서 확실한 이벤트 제거
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
     };
   }, []);
 
-  // 모바일 터치 스크롤 가속도 제어 및 제스처 개선
+  // 모바일 터치 스크롤 가속도 제어 및 제스처 개선 - 메모리 누수 방지 강화
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    let startY;
-    let startTime;
-    let isVerticalSwipe = false;
-
     // 터치 시작 지점 기록
     const handleTouchStart = (e) => {
-      startY = e.touches[0].clientY;
-      startTime = Date.now();
-      isVerticalSwipe = false;
+      touchStartRef.current = e.touches[0].clientY;
+      touchTimeRef.current = Date.now();
+      isVerticalSwipeRef.current = false;
     };
 
     // 터치 이동 중 속도 제어 및 방향 감지
     const handleTouchMove = (e) => {
-      if (!startY) return;
+      if (!touchStartRef.current) return;
 
       const currentY = e.touches[0].clientY;
-      const deltaY = Math.abs(currentY - startY);
-      const timeDiff = Date.now() - startTime;
+      const deltaY = Math.abs(currentY - touchStartRef.current);
+      const timeDiff = Date.now() - touchTimeRef.current;
       
       // 수직 스와이프 감지
       if (deltaY > 10) {
-        isVerticalSwipe = true;
+        isVerticalSwipeRef.current = true;
       }
       
       // 스크롤 속도가 너무 빠르면 제한 (부드러운 스크롤을 위해)
-      if (isVerticalSwipe && deltaY / timeDiff > 1.5) {
+      if (isVerticalSwipeRef.current && deltaY / timeDiff > 1.5) {
         e.preventDefault();
       }
     };
 
     // 터치 종료 시 상태 초기화
     const handleTouchEnd = () => {
-      startY = null;
-      startTime = null;
-      isVerticalSwipe = false;
+      touchStartRef.current = null;
+      touchTimeRef.current = null;
+      isVerticalSwipeRef.current = false;
     };
 
-    // 이벤트 리스너 등록
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    // 이벤트 리스너 등록 - passive 옵션 최적화
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd, { passive: true });
 
-    // 정리 함수
+    // 정리 함수 - 메모리 누수 방지 강화
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
+      if (container) {
+        container.removeEventListener('touchstart', handleTouchStart);
+        container.removeEventListener('touchmove', handleTouchMove);
+        container.removeEventListener('touchend', handleTouchEnd);
+      }
+      // ref 초기화
+      touchStartRef.current = null;
+      touchTimeRef.current = null;
+      isVerticalSwipeRef.current = false;
     };
   }, []);
 
-  // 무한 스크롤을 위한 Intersection Observer 콜백
+  // 무한 스크롤을 위한 Intersection Observer 콜백 - 메모이제이션
   const handleIntersect = useCallback((entries) => {
     if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+      fetchNextPage().catch((error) => {
+        errorHandlers.dataLoad(error);
+      });
     }
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // Intersection Observer 설정
+  // Intersection Observer 설정 - 메모리 누수 방지 강화
   useEffect(() => {
+    // 기존 observer 정리
+    if (intersectionObserverRef.current) {
+      intersectionObserverRef.current.disconnect();
+      intersectionObserverRef.current = null;
+    }
+
     const observer = new IntersectionObserver(handleIntersect, { 
-      threshold: 0.1, // 10% 보일 때 트리거 (더 빠른 로딩)
+      threshold: 0.1, // 10% 보일 때 트리거
       rootMargin: '300px' // 300px 미리 로딩으로 끊김 없는 스크롤
     });
+
+    intersectionObserverRef.current = observer;
 
     if (observerRef.current) {
       observer.observe(observerRef.current);
     }
 
-    return () => observer.disconnect();
+    return () => {
+      // 정리 함수에서 확실한 observer 해제
+      if (intersectionObserverRef.current) {
+        intersectionObserverRef.current.disconnect();
+        intersectionObserverRef.current = null;
+      }
+    };
   }, [handleIntersect]);
 
-  // 맨 위로 스크롤
-  const scrollToTop = () => {
+  // 맨 위로 스크롤 - 메모이제이션
+  const scrollToTop = useCallback(() => {
     containerRef.current?.scrollTo({
       top: 0,
       behavior: 'smooth'
     });
-  };
+  }, []);
 
-  // 새로고침
-  const handleRefresh = () => {
-    refetch();
+  // 새로고침 - 메모이제이션
+  const handleRefresh = useCallback(() => {
+    refetch().catch((error) => {
+      errorHandlers.dataLoad(error);
+    });
     scrollToTop();
-  };
+  }, [refetch, scrollToTop]);
 
-  // 키보드 네비게이션
+  // 키보드 네비게이션 - 메모리 누수 방지 강화
   useEffect(() => {
     const handleKeyDown = (e) => {
       const container = containerRef.current;
@@ -206,15 +233,22 @@ function ThreadPage() {
           e.preventDefault();
           container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
           break;
+        default:
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [getContentHeight, scrollToTop]);
 
-  // 모든 페이지의 노트를 평탄화
-  const allNotes = data?.pages.flatMap(page => page?.notes || []) || [];
+  // 모든 페이지의 노트를 평탄화 - 메모이제이션
+  const allNotes = useMemo(() => {
+    return data?.pages.flatMap(page => page?.notes || []) || [];
+  }, [data?.pages]);
 
   // 초기 로딩 상태
   if (isLoading) {
@@ -234,9 +268,7 @@ function ThreadPage() {
         className={`flex flex-col items-center justify-center p-4 ${themeClass}`}
         style={{ height: 'calc(100vh - 128px)' }}
       >
-        <div
-          className="text-center max-w-md"
-        >
+        <div className="text-center max-w-md">
           <AiOutlineWarning className="text-6xl text-red-500 mb-4 mx-auto" />
           <h2 className={`text-xl font-bold mb-2 ${currentTheme?.textColor || 'text-red-700'}`}>
             데이터를 불러오는데 실패했습니다
@@ -271,18 +303,16 @@ function ThreadPage() {
         className={`flex flex-col items-center justify-center p-4 ${themeClass}`}
         style={{ height: 'calc(100vh - 128px)' }}
       >
-        <div
-          className="text-center max-w-md"
-        >
-          <div className="text-6xl mb-4">📱</div>
+        <div className="text-center max-w-md">
+          <div className={`text-6xl mb-4 ${currentTheme?.textSecondary || 'text-gray-400'}`}>📝</div>
           <h2 className={`text-xl font-bold mb-2 ${currentTheme?.textColor || 'text-gray-700'}`}>
             아직 스레드가 없습니다
           </h2>
-          <p className={`mb-6 opacity-70 ${currentTheme?.textColor || 'text-gray-600'}`}>
-            첫 번째 노트를 작성해서 스레드를 시작해보세요!
+          <p className={`mb-6 ${currentTheme?.textSecondary || 'text-gray-600'}`}>
+            첫 번째 노트를 작성해보세요!
           </p>
           <button 
-            onClick={() => window.location.href = ROUTES.WRITE}
+            onClick={() => window.location.href = '/write'}
             className={`px-6 py-3 rounded-lg transition-all duration-200 ${currentTheme?.buttonBg || 'bg-blue-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90`}
           >
             노트 작성하기
@@ -338,38 +368,32 @@ function ThreadPage() {
         {/* 마지막 페이지 안내 */}
         {!hasNextPage && allNotes.length > 0 && (
           <div
-            className="w-full flex items-center justify-center"
-            style={{ height: 'calc(100vh - 128px)' }}
+            className="w-full flex items-center justify-center py-8"
           >
-            <div className="text-center p-8">
-              <div className="text-4xl mb-4">🎉</div>
-              <p className="text-white text-lg font-medium mb-2">모든 스레드를 확인했습니다!</p>
-              <p className="text-white/70 text-sm mb-6">새로운 노트를 작성해보세요</p>
-              <button
-                onClick={() => window.location.href = ROUTES.WRITE}
-                className="px-6 py-3 bg-white/20 text-white rounded-lg backdrop-blur-sm hover:bg-white/30 transition-all"
-              >
-                노트 작성하기
-              </button>
+            <div className="text-center">
+              <p className={`text-lg font-medium mb-2 ${currentTheme?.textColor || 'text-white'}`}>
+                🎉 모든 스레드를 확인했습니다!
+              </p>
+              <p className={`text-sm ${currentTheme?.textSecondary || 'text-gray-300'}`}>
+                새로운 노트를 작성해보세요
+              </p>
             </div>
           </div>
         )}
       </div>
 
-      {/* 플로팅 액션 버튼들 */}
+      {/* 맨 위로 스크롤 버튼 */}
       <AnimatePresence>
         {showScrollTop && (
           <button
             onClick={scrollToTop}
-            className="thread-floating-button fixed bottom-24 right-4 z-30 text-white p-3 rounded-full transition-all"
+            className={`fixed bottom-20 right-4 z-40 p-3 rounded-full shadow-lg transition-all duration-200 ${currentTheme?.buttonBg || 'bg-blue-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90`}
             aria-label="맨 위로 스크롤"
           >
-            <IoArrowUpOutline className="text-xl" />
+            <IoArrowUpOutline className="w-6 h-6" />
           </button>
         )}
       </AnimatePresence>
-
-      {/* 키보드 힌트 (데스크톱에서만) */}
     </div>
   );
 }

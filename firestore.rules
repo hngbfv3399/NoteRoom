@@ -83,38 +83,47 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    // 노트 컬렉션 규칙
+    // 노트 컬렉션 규칙 - 2025.05.27 업데이트
     match /notes/{noteId} {
       // 읽기는 모든 인증된 사용자에게 허용
       allow read: if isAuthenticated();
       
-      // 생성 시 필수 필드 확인
+      // 생성 시 필수 필드 확인 - userUid 필드 사용
       allow create: if isAuthenticated() 
         && request.resource.data.userUid == request.auth.uid
         && request.resource.data.title is string
         && request.resource.data.content is string
-        && request.resource.data.category is string;
+        && request.resource.data.category is string
+        && request.resource.data.likes is number
+        && request.resource.data.views is number
+        && request.resource.data.commentCount is number;
       
-      // 수정 규칙을 더 세분화
+      // 수정 규칙을 더 세분화 - 2025.05.27 업데이트
       allow update: if isAuthenticated() && (
-        // 작성자는 모든 필드 수정 가능 (노트 편집 기능)
-        (resource.data.userUid == request.auth.uid && (
-          // 일반 노트 수정 (제목, 내용, 카테고리, 이미지)
-          isSafeFieldUpdate(['title', 'content', 'category', 'image', 'updatedAt']) ||
+        // 작성자는 모든 필드 수정 가능 (노트 편집 기능) - userUid 또는 userId 확인
+        ((resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid) && (
+          // 일반 노트 수정 (제목, 내용, 카테고리, 이미지, 썸네일)
+          isSafeFieldUpdate(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt']) ||
           // 노트 수정 시간만 업데이트
           isSafeFieldUpdate(['updatedAt']) ||
+          // 썸네일 이미지만 업데이트
+          isSafeFieldUpdate(['image']) ||
+          // 썸네일만 업데이트
+          isSafeFieldUpdate(['thumbnail']) ||
           // 노트 전체 수정 (편집 시)
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'updatedAt'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt'])
         )) ||
         // 다른 사용자는 상호작용 관련 필드만 수정 가능
         isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment']) ||
         // 관리자는 댓글 마이그레이션을 위해 comment 필드와 마이그레이션 관련 필드 업데이트 가능
-        (isAdmin() && isSafeFieldUpdate(['comment', 'commentMigratedAt']))
+        (isAdmin() && isSafeFieldUpdate(['comment', 'commentMigratedAt'])) ||
+        // 관리자는 썸네일 마이그레이션을 위해 thumbnail 필드와 마이그레이션 관련 필드 업데이트 가능
+        (isAdmin() && isSafeFieldUpdate(['thumbnail', 'thumbnailMigratedAt']))
       );
       
-      // 삭제는 작성자만 가능
+      // 삭제는 작성자만 가능 - userUid 또는 userId 확인
       allow delete: if isAuthenticated() 
-        && resource.data.userUid == request.auth.uid;
+        && (resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid);
 
       // 좋아요 서브컬렉션 규칙
       match /likesUsers/{userId} {
@@ -185,7 +194,10 @@ service cloud.firestore {
 
     // 시스템 설정 관리
     match /systemSettings/{settingId} {
-      allow read, write: if isAdmin();
+      // 읽기: 모든 인증된 사용자 (점검 모드 상태 확인용)
+      allow read: if isAuthenticated();
+      // 쓰기: 관리자만 가능 (설정 변경)
+      allow write: if isAdmin();
     }
 
     // 보안 로그 컬렉션 규칙 (관리자만 접근 가능)
@@ -203,24 +215,61 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // 신고 컬렉션 규칙
+    // 신고 컬렉션 규칙 - 새로 추가
     match /reports/{reportId} {
-      // 읽기: 관리자는 모든 신고 조회 가능, 일반 사용자는 자신의 신고만 조회 가능
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+      // 읽기: 관리자만 가능
+      allow read: if isAdmin();
       
-      // 생성: 인증된 사용자는 신고 생성 가능
-      allow create: if isAuthenticated() 
-        && request.resource.data.reportedBy == request.auth.uid
-        && request.resource.data.contentType is string
-        && request.resource.data.contentId is string
+      // 생성: 인증된 사용자만 가능 (신고 제출)
+      allow create: if isAuthenticated()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.targetType is string
+        && request.resource.data.targetId is string
         && request.resource.data.reason is string
-        && request.resource.data.status == 'pending';
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp;
       
       // 수정: 관리자만 가능 (신고 처리)
+      allow update: if isAdmin()
+        && isSafeFieldUpdate(['status', 'adminNote', 'processedAt', 'processedBy']);
+      
+      // 삭제: 관리자만 가능
+      allow delete: if isAdmin();
+    }
+
+    // 차단된 사용자 컬렉션 규칙 - 새로 추가
+    match /blockedUsers/{userId} {
+      // 읽기: 본인 또는 관리자만 가능
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // 생성: 관리자만 가능
+      allow create: if isAdmin()
+        && request.resource.data.blockedUid is string
+        && request.resource.data.reason is string
+        && request.resource.data.blockedAt is timestamp
+        && request.resource.data.blockedBy == request.auth.uid;
+      
+      // 수정: 관리자만 가능 (차단 해제 등)
       allow update: if isAdmin();
       
-      // 삭제: 관리자 또는 신고자 본인만 가능 (신고 취소)
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+      // 삭제: 관리자만 가능
+      allow delete: if isAdmin();
+    }
+
+    // 사용자 활동 로그 컬렉션 규칙 - 새로 추가
+    match /userLogs/{logId} {
+      // 읽기: 관리자만 가능
+      allow read: if isAdmin();
+      
+      // 생성: 시스템에서 자동 생성 (인증된 사용자의 활동)
+      allow create: if isAuthenticated()
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.action is string
+        && request.resource.data.timestamp is timestamp
+        && request.resource.data.ipAddress is string;
+      
+      // 수정/삭제: 불가 (로그는 불변)
+      allow update, delete: if false;
     }
 
     // 구독 컬렉션 규칙

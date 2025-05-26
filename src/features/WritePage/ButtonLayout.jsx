@@ -12,11 +12,14 @@ import { validateNote, validateImageFile } from '@/utils/validation';
 import { checkNoteWriteLimit, checkImageUploadLimit } from '@/utils/rateLimiter';
 import { normalizeInput, createSafeErrorMessage } from '@/utils/security';
 import { sanitizeHtml } from '@/utils/sanitizeHtml';
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/services/firebase";
 
 function ButtonLayout({ editor, title, category, editId }) {
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
+  const [existingImageUrl, setExistingImageUrl] = useState(null); // 기존 이미지 URL 저장
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -158,6 +161,7 @@ function ButtonLayout({ editor, title, category, editId }) {
     }
     
     setImageFile(file);
+    setExistingImageUrl(null); // 새 이미지 선택 시 기존 이미지 URL 초기화
     setError(null);
     setShowImageModal(false);
   };
@@ -203,14 +207,34 @@ function ButtonLayout({ editor, title, category, editId }) {
       throw new Error("유효하지 않은 파일명입니다.");
     }
 
-    // 안전한 파일명 생성 (특수문자 제거)
-    const safeFileName = imageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    // 파일 헤더 검증 (매직 넘버 확인)
+    const fileHeader = await readFileHeader(imageFile);
+    if (!isValidImageHeader(fileHeader, imageFile.type)) {
+      throw new Error("파일 형식이 올바르지 않습니다. 실제 이미지 파일을 업로드해주세요.");
+    }
+
+    // 안전한 파일명 생성 (특수문자 제거 및 정규화)
+    const safeFileName = sanitizeFileName(imageFile.name);
     const timestamp = Date.now();
-    const uniqueFileName = `${timestamp}_${safeFileName}`;
+    const randomString = Math.random().toString(36).substring(2, 15);
+    const uniqueFileName = `${timestamp}_${randomString}_${safeFileName}`;
 
     try {
       const storageRef = ref(storage, `notes/${user.uid}/${uniqueFileName}`);
-      await uploadBytes(storageRef, imageFile);
+      
+      // 메타데이터 설정 (보안 강화)
+      const metadata = {
+        contentType: imageFile.type,
+        cacheControl: 'public, max-age=31536000', // 1년 캐시
+        customMetadata: {
+          uploadedBy: user.uid,
+          uploadedAt: new Date().toISOString(),
+          originalName: imageFile.name.substring(0, 100), // 원본 파일명 길이 제한
+          imageType: 'thumbnail'
+        }
+      };
+
+      await uploadBytes(storageRef, imageFile, metadata);
       const url = await getDownloadURL(storageRef);
       return url;
     } catch (error) {
@@ -223,10 +247,65 @@ function ButtonLayout({ editor, title, category, editId }) {
         throw new Error("저장 공간이 부족합니다.");
       } else if (error.code === 'storage/invalid-format') {
         throw new Error("지원하지 않는 이미지 형식입니다.");
+      } else if (error.code === 'storage/retry-limit-exceeded') {
+        throw new Error("업로드 재시도 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
       }
       
       throw new Error("이미지 업로드에 실패했습니다.");
     }
+  };
+
+  // 파일 헤더 읽기 함수
+  const readFileHeader = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const arrayBuffer = e.target.result;
+        const uint8Array = new Uint8Array(arrayBuffer);
+        resolve(uint8Array);
+      };
+      reader.onerror = () => reject(new Error("파일 읽기 실패"));
+      reader.readAsArrayBuffer(file.slice(0, 12)); // 처음 12바이트만 읽기
+    });
+  };
+
+  // 이미지 헤더 검증 함수 (매직 넘버 확인)
+  const isValidImageHeader = (header, mimeType) => {
+    const headerHex = Array.from(header).map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    switch (mimeType) {
+      case 'image/jpeg':
+      case 'image/jpg':
+        return headerHex.startsWith('ffd8ff'); // JPEG 매직 넘버
+      case 'image/png':
+        return headerHex.startsWith('89504e47'); // PNG 매직 넘버
+      case 'image/gif':
+        return headerHex.startsWith('474946'); // GIF 매직 넘버
+      case 'image/webp':
+        return headerHex.includes('57454250'); // WebP 매직 넘버 (RIFF 컨테이너 내)
+      default:
+        return false;
+    }
+  };
+
+  // 파일명 정규화 함수
+  const sanitizeFileName = (fileName) => {
+    // 1. 확장자 분리
+    const lastDotIndex = fileName.lastIndexOf('.');
+    const name = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+    const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '';
+    
+    // 2. 파일명 정규화 (특수문자 제거, 공백을 언더스코어로 변경)
+    const sanitizedName = name
+      .replace(/[^a-zA-Z0-9가-힣\s.-]/g, '') // 허용된 문자만 유지
+      .replace(/\s+/g, '_') // 공백을 언더스코어로 변경
+      .replace(/_{2,}/g, '_') // 연속된 언더스코어 제거
+      .substring(0, 50); // 파일명 길이 제한
+    
+    // 3. 빈 파일명 방지
+    const finalName = sanitizedName || 'image';
+    
+    return finalName + extension.toLowerCase();
   };
 
   const validateInput = () => {
@@ -245,7 +324,8 @@ function ButtonLayout({ editor, title, category, editId }) {
       throw new Error(noteValidation.errors[0]);
     }
     
-    if (!isEditMode && !imageFile) {
+    // 새 글 작성 시에만 이미지 필수 (편집 모드에서는 기존 이미지가 있으면 OK)
+    if (!isEditMode && !imageFile && !existingImageUrl) {
       throw new Error("썸네일 이미지를 선택해주세요.");
     }
     
@@ -272,8 +352,34 @@ function ButtonLayout({ editor, title, category, editId }) {
       const validatedData = validateInput();
 
       let uploadedImageUrl = null;
-      if (imageFile) {
-        uploadedImageUrl = await uploadImage();
+      
+      // 편집 모드에서 기존 이미지 처리
+      if (isEditMode) {
+        // 새로운 이미지가 선택된 경우
+        if (imageFile) {
+          uploadedImageUrl = await uploadImage();
+        } else if (existingImageUrl) {
+          // 기존 이미지 URL 사용 (새 이미지를 선택하지 않은 경우)
+          uploadedImageUrl = existingImageUrl;
+        } else {
+          // 기존 노트의 이미지 유지 (편집 시 이미지를 변경하지 않은 경우)
+          try {
+            const noteDocRef = doc(db, "notes", editId);
+            const noteDoc = await getDoc(noteDocRef);
+            if (noteDoc.exists()) {
+              const existingNote = noteDoc.data();
+              // 썸네일 필드 우선 확인, 없으면 image 필드 확인
+              uploadedImageUrl = existingNote.thumbnail || existingNote.image || null;
+            }
+          } catch (error) {
+            console.warn("기존 노트 이미지 로드 실패:", error);
+          }
+        }
+      } else {
+        // 새 글 작성 모드
+        if (imageFile) {
+          uploadedImageUrl = await uploadImage();
+        }
       }
       
       // HTML 콘텐츠 정화
@@ -289,9 +395,10 @@ function ButtonLayout({ editor, title, category, editId }) {
         commentCount: 0,
       };
 
-      // 이미지가 있을 때만 추가
+      // 이미지가 있을 때만 추가 (null이나 undefined가 아닌 경우)
       if (uploadedImageUrl) {
         noteData.image = uploadedImageUrl;
+        noteData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
       }
 
       if (isEditMode) {
@@ -314,6 +421,36 @@ function ButtonLayout({ editor, title, category, editId }) {
       setUploading(false);
     }
   };
+
+  // 편집 모드에서 기존 노트 이미지 로드
+  useEffect(() => {
+    const loadExistingImage = async () => {
+      if (isEditMode && editId && !imageFile && !existingImageUrl) {
+        try {
+          const noteDocRef = doc(db, "notes", editId);
+          const noteDoc = await getDoc(noteDocRef);
+          if (noteDoc.exists()) {
+            const existingNote = noteDoc.data();
+            
+            // 썸네일 필드 우선 확인, 없으면 image 필드 확인
+            const existingImageUrl = existingNote.thumbnail || existingNote.image;
+            
+            if (existingImageUrl) {
+              // 기존 이미지가 있으면 썸네일 섹션을 자동으로 표시
+              setShowThumbnail(true);
+              setExistingImageUrl(existingImageUrl);
+              
+              console.log("기존 노트 썸네일 URL 로드 완료:", existingImageUrl);
+            }
+          }
+        } catch (error) {
+          console.warn("기존 노트 이미지 확인 실패:", error);
+        }
+      }
+    };
+
+    loadExistingImage();
+  }, [isEditMode, editId, imageFile, existingImageUrl]);
 
   if (uploading) {
     return <LoadingPage />;
@@ -349,7 +486,7 @@ function ButtonLayout({ editor, title, category, editId }) {
               글 작성 진행도
             </h3>
             <span className={`text-sm font-medium ${currentTheme?.textColor || 'text-gray-600'}`}>
-              {[title.trim(), category.trim(), editor?.getHTML()?.trim(), imageFile].filter(Boolean).length}/4
+              {[title.trim(), category.trim(), editor?.getHTML()?.trim(), imageFile || existingImageUrl].filter(Boolean).length}/4
             </span>
           </div>
           
@@ -358,7 +495,7 @@ function ButtonLayout({ editor, title, category, editId }) {
             <div
               className={`h-full rounded-full transition-all duration-500 ${currentTheme?.buttonBg || 'bg-blue-500'}`}
               style={{ 
-                width: `${([title.trim(), category.trim(), editor?.getHTML()?.trim(), imageFile].filter(Boolean).length / 4) * 100}%` 
+                width: `${([title.trim(), category.trim(), editor?.getHTML()?.trim(), imageFile || existingImageUrl].filter(Boolean).length / 4) * 100}%` 
               }}
             />
           </div>
@@ -380,10 +517,10 @@ function ButtonLayout({ editor, title, category, editId }) {
               <span className={`text-xs ${currentTheme?.textColor || 'text-gray-600'}`}>내용</span>
               {editor?.getHTML()?.trim() && <span className="text-xs text-green-500">✓</span>}
             </div>
-            <div className={`flex items-center space-x-1 ${imageFile ? 'opacity-100' : 'opacity-40'}`}>
+            <div className={`flex items-center space-x-1 ${imageFile || existingImageUrl ? 'opacity-100' : 'opacity-40'}`}>
               <span className="text-sm">📸</span>
               <span className={`text-xs ${currentTheme?.textColor || 'text-gray-600'}`}>썸네일</span>
-              {imageFile && <span className="text-xs text-green-500">✓</span>}
+              {(imageFile || existingImageUrl) && <span className="text-xs text-green-500">✓</span>}
             </div>
           </div>
         </div>
@@ -419,7 +556,9 @@ function ButtonLayout({ editor, title, category, editId }) {
                     썸네일 이미지 <span className="text-red-500">*</span>
                   </h3>
                   <p className={`text-sm opacity-70 text-left ${currentTheme?.textColor || 'text-gray-600'}`}>
-                    {imageFile ? `선택됨: ${imageFile.name}` : '이미지를 선택해주세요'}
+                    {imageFile ? `새 이미지 선택됨: ${imageFile.name}` : 
+                     existingImageUrl ? '기존 이미지 사용 중 (새 이미지를 선택하여 변경 가능)' : 
+                     '이미지를 선택해주세요'}
                   </p>
                 </div>
               </div>
@@ -506,6 +645,36 @@ function ButtonLayout({ editor, title, category, editId }) {
                         다른 이미지 선택
                       </button>
                     </div>
+                  ) : existingImageUrl ? (
+                    <div className="space-y-3">
+                      <div className="text-4xl">🖼️</div>
+                      <div>
+                        <p className={`font-medium ${currentTheme?.textColor || 'text-blue-700'}`}>
+                          기존 썸네일 이미지
+                        </p>
+                        <p className={`text-sm opacity-70 ${currentTheme?.textColor || 'text-blue-600'}`}>
+                          현재 노트의 썸네일을 사용합니다
+                        </p>
+                      </div>
+                      <div className="mt-4">
+                        <img 
+                          src={existingImageUrl} 
+                          alt="기존 썸네일" 
+                          className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            console.warn("기존 썸네일 이미지 로드 실패:", existingImageUrl);
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExistingImageUrl(null)}
+                        className={`text-sm underline ${currentTheme?.textColor || 'text-gray-600'} hover:opacity-70`}
+                      >
+                        새 이미지로 변경
+                      </button>
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="text-4xl animate-pulse">📸</div>
@@ -565,9 +734,12 @@ function ButtonLayout({ editor, title, category, editId }) {
           {/* 왼쪽: 완료 상태 요약 */}
           <div className="flex items-center space-x-2">
             <span className={`text-sm ${currentTheme?.textColor || 'text-gray-600'}`}>
-              {isContentComplete ? 
-                (imageFile ? "발행 준비 완료!" : "썸네일만 선택하면 완료!") : 
-                "글 작성을 완료해주세요"
+              {isEditMode ? 
+                (isContentComplete ? "수정 준비 완료!" : "글 내용을 확인해주세요") :
+                (isContentComplete ? 
+                  (imageFile || existingImageUrl ? "발행 준비 완료!" : "썸네일만 선택하면 완료!") : 
+                  "글 작성을 완료해주세요"
+                )
               }
             </span>
           </div>
@@ -583,7 +755,7 @@ function ButtonLayout({ editor, title, category, editId }) {
             </ThemedButton>
             <ThemedButton 
               onClick={handleSubmit} 
-              disabled={uploading || !imageFile || !isContentComplete}
+              disabled={uploading || (!isEditMode && !(imageFile || existingImageUrl)) || !isContentComplete}
               className="px-8 py-3 font-semibold"
             >
               {uploading ? (
@@ -592,7 +764,7 @@ function ButtonLayout({ editor, title, category, editId }) {
                   <span>발행 중...</span>
                 </div>
               ) : (
-                "발행하기"
+                isEditMode ? "수정하기" : "발행하기"
               )}
             </ThemedButton>
           </div>

@@ -6,44 +6,114 @@
 import { doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/services/firebase';
 
-// VAPID 공개 키 (실제 프로덕션에서는 환경변수로 관리)
-const VAPID_PUBLIC_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa40HI0DLLuxazjqAKUrXKffi_7TnTTXK1qNMFwremT-jRE6RlxySJZfQOVm8E';
+// VAPID 공개 키 (환경변수에서 가져오기, 없으면 기본값 사용)
+// 🔑 Firebase Console에서 확인한 정확한 VAPID 키
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BJNZw1mDk66nKI5Nge3jRgp5PmWOVOJy9zFZ9BRgyWLiJlZOASQVOw3vw-abPWXTg6wEDkkE9pGiXhKPE8GChWw';
+
+// 🚨 VAPID 키 정보:
+// - Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인됨
+// - 상태: 활성 (2025. 5. 27. 추가됨)
+// - 환경변수로 설정하려면: VITE_VAPID_PUBLIC_KEY=위의키값
 
 let swRegistration = null;
 
-// Service Worker 등록
+// Service Worker 등록 (Workbox와 충돌 방지)
 export const registerServiceWorker = async () => {
-  if (!('serviceWorker' in navigator)) {
+  // Service Worker 지원 확인 (더 정확한 감지)
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker) {
     console.warn('이 브라우저는 Service Worker를 지원하지 않습니다.');
     return null;
   }
 
+  // HTTPS 환경 확인 (localhost 제외)
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    console.warn('Service Worker는 HTTPS 환경에서만 작동합니다.');
+    return null;
+  }
+
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js');
-    console.log('Service Worker 등록 성공:', registration);
+    // 기존 등록된 Service Worker 확인
+    let registration = await navigator.serviceWorker.getRegistration();
+    
+    if (!registration) {
+      // 새로운 Service Worker 등록
+      registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/',
+        updateViaCache: 'none'
+      });
+      console.log('Service Worker 등록 성공:', registration);
+    } else {
+      console.log('기존 Service Worker 사용:', registration);
+    }
+    
+    // Service Worker가 활성화될 때까지 대기
+    if (registration.installing) {
+      await new Promise((resolve) => {
+        const worker = registration.installing;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'activated') {
+            resolve();
+          }
+        });
+      });
+    }
+    
+    // Service Worker 준비 상태 확인
+    await navigator.serviceWorker.ready;
+    
     swRegistration = registration;
     return registration;
   } catch (error) {
     console.error('Service Worker 등록 실패:', error);
+    
+    // 구체적인 오류 메시지 제공
+    if (error.name === 'SecurityError') {
+      console.error('보안 오류: HTTPS 환경에서만 Service Worker를 사용할 수 있습니다.');
+    } else if (error.name === 'TypeError') {
+      console.error('타입 오류: Service Worker 파일을 찾을 수 없습니다.');
+    }
+    
     return null;
   }
 };
 
 // 푸시 구독 생성
 export const subscribeToPush = async () => {
-  if (!swRegistration) {
-    console.warn('Service Worker가 등록되지 않았습니다.');
-    return null;
-  }
-
   try {
+    console.log('푸시 구독 시작...');
+    
+    if (!swRegistration) {
+      console.log('Service Worker 재등록 시도...');
+      swRegistration = await registerServiceWorker();
+      if (!swRegistration) {
+        console.error('Service Worker 등록 실패');
+        return null;
+      }
+    }
+
+    // 기존 구독 확인
+    const existingSubscription = await swRegistration.pushManager.getSubscription();
+    if (existingSubscription) {
+      console.log('기존 푸시 구독 사용:', existingSubscription);
+      return existingSubscription;
+    }
+
+    // VAPID 키 유효성 검사
+    if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY.length < 80) {
+      console.error('VAPID 키가 올바르지 않습니다. Firebase Console에서 새로운 키를 생성해주세요.');
+      throw new Error('Invalid VAPID key format');
+    }
+
+    console.log('VAPID 키 사용:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+
+    // 새 구독 생성
     const subscription = await swRegistration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     });
 
     console.log('푸시 구독 성공:', subscription);
-    
+
     // Firestore에 구독 정보 저장
     const currentUser = auth.currentUser;
     if (currentUser) {
@@ -53,6 +123,23 @@ export const subscribeToPush = async () => {
     return subscription;
   } catch (error) {
     console.error('푸시 구독 실패:', error);
+    
+    // VAPID 키 관련 오류인지 확인
+    if (error.message.includes('Invalid raw ECDSA P-256 public key') || 
+        error.message.includes('Invalid VAPID key') ||
+        error.name === 'InvalidStateError') {
+      console.error('🔑 VAPID 키 오류 해결 방법:');
+      console.error('1. Firebase Console > 프로젝트 설정 > 클라우드 메시징');
+      console.error('2. 웹 구성에서 "키 쌍 생성" 클릭');
+      console.error('3. 새로 생성된 키를 코드에 적용');
+      console.error('4. 현재 키:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+      
+      // 사용자에게 친화적인 오류 메시지 표시
+      if (typeof window !== 'undefined' && window.alert) {
+        alert('푸시 알림 설정 중 VAPID 키 오류가 발생했습니다.\n\n해결 방법:\n1. Firebase Console에서 새 VAPID 키 생성\n2. 개발자에게 키 업데이트 요청');
+      }
+    }
+    
     return null;
   }
 };

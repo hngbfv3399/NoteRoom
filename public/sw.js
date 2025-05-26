@@ -3,57 +3,113 @@
  * PWA 푸시 알림 및 오프라인 기능을 제공합니다.
  */
 
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { ExpirationPlugin } from 'workbox-expiration';
+
+// Workbox 사전 캐싱 설정
+precacheAndRoute(self.__WB_MANIFEST);
+cleanupOutdatedCaches();
+
+// 캐시 이름
 const CACHE_NAME = 'noteroom-v1';
-const urlsToCache = [
-  '/',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
-  '/manifest.json'
-];
+
+// 정적 리소스 캐싱 (이미지, 폰트 등)
+registerRoute(
+  ({ request }) => request.destination === 'image',
+  new CacheFirst({
+    cacheName: 'images-cache',
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 100,
+        maxAgeSeconds: 60 * 60 * 24 * 30, // 30일
+      }),
+    ],
+  })
+);
+
+// Google Fonts 캐싱
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.googleapis.com',
+  new CacheFirst({
+    cacheName: 'google-fonts-cache',
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 10,
+        maxAgeSeconds: 60 * 60 * 24 * 365, // 1년
+      }),
+    ],
+  })
+);
+
+// Firestore 요청 처리 - 실시간 리스너는 완전히 제외
+registerRoute(
+  ({ url, request }) => {
+    // Firestore 도메인이 아니면 처리하지 않음
+    if (url.hostname !== 'firestore.googleapis.com') {
+      return false;
+    }
+    
+    // 실시간 리스너 관련 요청들은 Service Worker가 처리하지 않음
+    const isRealtimeRequest = 
+      url.pathname.includes('/Listen/') ||
+      url.pathname.includes('/channel') ||
+      url.search.includes('Listen') ||
+      url.search.includes('channel') ||
+      request.method === 'POST' && url.pathname.includes('/Firestore/');
+    
+    if (isRealtimeRequest) {
+      return false; // Service Worker가 처리하지 않음
+    }
+    
+    // 일반 Firestore 요청만 처리
+    return true;
+  },
+  async ({ request }) => {
+    try {
+      // 네트워크 우선, 실패 시 오류 반환
+      const response = await fetch(request);
+      
+      if (!response.ok) {
+        console.warn('Firestore 응답 오류:', response.status, response.statusText);
+      }
+      
+      return response;
+    } catch (error) {
+      console.warn('Firestore 요청 실패:', error);
+      
+      // 일반 Firestore 요청 실패
+      return new Response(
+        JSON.stringify({ 
+          error: 'Network unavailable',
+          message: 'Please check your internet connection'
+        }),
+        {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        }
+      );
+    }
+  }
+);
 
 // Service Worker 설치
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   console.log('Service Worker 설치 중...');
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('캐시 열기 성공');
-        return cache.addAll(urlsToCache);
-      })
-  );
+  // 즉시 활성화
+  self.skipWaiting();
 });
 
 // Service Worker 활성화
 self.addEventListener('activate', (event) => {
   console.log('Service Worker 활성화됨');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('오래된 캐시 삭제:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
-
-// 네트워크 요청 가로채기 (오프라인 지원)
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // 캐시에 있으면 캐시에서 반환
-        if (response) {
-          return response;
-        }
-        // 없으면 네트워크에서 가져오기
-        return fetch(event.request);
-      }
-    )
-  );
+  // 모든 클라이언트 제어
+  event.waitUntil(self.clients.claim());
 });
 
 // 푸시 알림 수신
@@ -122,7 +178,7 @@ self.addEventListener('notificationclick', (event) => {
   const urlToOpen = event.notification.data?.url || '/';
   
   event.waitUntil(
-    clients.matchAll({
+    self.clients.matchAll({
       type: 'window',
       includeUncontrolled: true
     }).then((clientList) => {
@@ -130,14 +186,16 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
-          client.navigate(urlToOpen);
+          if (client.navigate) {
+            client.navigate(urlToOpen);
+          }
           return;
         }
       }
       
       // 열린 탭이 없으면 새 탭 열기
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(urlToOpen);
       }
     })
   );

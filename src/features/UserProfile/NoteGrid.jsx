@@ -19,7 +19,7 @@ import LoginComponents from "@/components/LoginComponents";
 import { getThemeClass } from "@/utils/themeHelper";
 import { ROUTES } from '@/constants/routes';
 
-function NoteGrid({ notes, onNoteClick, onNoteEdit, isOwnProfile }) {
+function NoteGrid({ notes, onNoteClick, onNoteEdit, onNoteDelete, isOwnProfile }) {
   // 현재 테마 가져오기
   const { current, themes } = useSelector((state) => state.theme);
   const currentTheme = themes[current];
@@ -31,6 +31,15 @@ function NoteGrid({ notes, onNoteClick, onNoteEdit, isOwnProfile }) {
   // 노트 클릭 핸들러
   const handleNoteClick = (note) => {
     onNoteClick(note);
+  };
+
+  // 노트 삭제 확인 핸들러
+  const handleDeleteNote = (note, e) => {
+    e.stopPropagation();
+    
+    if (window.confirm(`"${note.title}" 노트를 정말 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+      onNoteDelete(note);
+    }
   };
 
   // 빈 상태 컴포넌트
@@ -124,7 +133,7 @@ function NoteGrid({ notes, onNoteClick, onNoteEdit, isOwnProfile }) {
             <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>노트 우측 상단의 수정 버튼을 클릭하여 편집할 수 있습니다</span>
+            <span>노트 우측 상단의 수정(파란색) 및 삭제(빨간색) 버튼을 클릭하여 관리할 수 있습니다</span>
           </p>
         </div>
       )}
@@ -141,22 +150,39 @@ function NoteGrid({ notes, onNoteClick, onNoteEdit, isOwnProfile }) {
             tabIndex={0}
             aria-label={`노트 "${note.title}" 상세보기`}
           >
-            {/* 본인 노트인 경우 수정 버튼 */}
-            {isOwnProfile && onNoteEdit && (
-              <div className="absolute top-2 right-2 z-10 transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNoteEdit(note);
-                  }}
-                  className="p-1.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors shadow-md text-xs sm:text-sm"
-                  title="노트 수정"
-                  aria-label="노트 수정"
-                >
-                  <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
+            {/* 본인 노트인 경우 수정/삭제 버튼 */}
+            {isOwnProfile && (onNoteEdit || onNoteDelete) && (
+              <div className="absolute top-2 right-2 z-10 flex space-x-1 transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-95 sm:group-hover:scale-100">
+                {/* 수정 버튼 */}
+                {onNoteEdit && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNoteEdit(note);
+                    }}
+                    className="p-1.5 rounded-full bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors shadow-md text-xs sm:text-sm"
+                    title="노트 수정"
+                    aria-label="노트 수정"
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                )}
+                
+                {/* 삭제 버튼 */}
+                {onNoteDelete && (
+                  <button
+                    onClick={(e) => handleDeleteNote(note, e)}
+                    className="p-1.5 rounded-full bg-red-500 text-white hover:bg-red-600 active:bg-red-700 transition-colors shadow-md text-xs sm:text-sm"
+                    title="노트 삭제"
+                    aria-label="노트 삭제"
+                  >
+                    <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )}
               </div>
             )}
 
@@ -228,6 +254,7 @@ NoteGrid.propTypes = {
   notes: PropTypes.array,
   onNoteClick: PropTypes.func.isRequired,
   onNoteEdit: PropTypes.func,
+  onNoteDelete: PropTypes.func,
   isOwnProfile: PropTypes.bool,
 };
 
