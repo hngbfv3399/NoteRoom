@@ -4,9 +4,9 @@ import { storage } from "@/services/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth } from "@/services/firebase";
 import { useSelector } from 'react-redux';
-import { validateImageFile, validateUrl } from '@/utils/validation';
-import { checkImageUploadLimit } from '@/utils/rateLimiter';
-import { normalizeInput, createSafeErrorMessage } from '@/utils/security';
+// import { validateImageFile, validateUrl } from '@/utils/validation';
+// import { checkImageUploadLimit } from '@/utils/rateLimiter';
+// import { normalizeInput, createSafeErrorMessage } from '@/utils/security';
 import { 
   RiTextWrap,
   RiAlignLeft,
@@ -164,22 +164,54 @@ function MenuBar({ editor }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("이미지 크기는 5MB를 초과할 수 없습니다.");
+    // 사용자 인증 확인
+    const user = auth.currentUser;
+    if (!user) {
+      alert("로그인이 필요합니다.");
       return;
     }
 
+    // 파일 보안 검증
     try {
-      const user = auth.currentUser;
-      if (!user) {
-        alert("로그인이 필요합니다.");
+      // 파일 크기 검증 (5MB 제한)
+      if (file.size > 5 * 1024 * 1024) {
+        alert("이미지 크기는 5MB를 초과할 수 없습니다.");
         return;
       }
 
-      const storageRef = ref(storage, `notes/content/${user.uid}/${Date.now()}_${file.name}`);
+      // 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        alert("지원하지 않는 파일 형식입니다. (JPG, PNG, GIF, WebP만 허용)");
+        return;
+      }
+
+      // 파일 확장자 검증
+      const fileName = file.name.toLowerCase();
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+      if (!hasValidExtension) {
+        alert("허용되지 않는 파일 확장자입니다.");
+        return;
+      }
+
+      // 파일명 보안 검증 (경로 순회 공격 방지)
+      if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+        alert("유효하지 않은 파일명입니다.");
+        return;
+      }
+
+      // 안전한 파일명 생성 (특수문자 제거)
+      const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const timestamp = Date.now();
+      const uniqueFileName = `${timestamp}_${safeFileName}`;
+
+      // Firebase Storage에 업로드
+      const storageRef = ref(storage, `notes/content/${user.uid}/${uniqueFileName}`);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
 
+      // 에디터에 이미지 삽입
       editor.chain().focus().setImage({ 
         src: url,
         width: '300px',
@@ -187,6 +219,7 @@ function MenuBar({ editor }) {
         style: 'object-fit: contain;'
       }).run();
 
+      // 이미지 선택 이벤트 발생
       const { state } = editor;
       const pos = state.selection.from;
       window.dispatchEvent(new CustomEvent('imageSelected', {
@@ -195,9 +228,21 @@ function MenuBar({ editor }) {
           node: state.doc.nodeAt(pos)
         }
       }));
+
     } catch (error) {
       console.error("이미지 업로드 실패:", error);
-      alert("이미지 업로드에 실패했습니다.");
+      
+      // 사용자 친화적인 오류 메시지
+      let errorMessage = "이미지 업로드에 실패했습니다.";
+      if (error.code === 'storage/unauthorized') {
+        errorMessage = "이미지 업로드 권한이 없습니다. 로그인 상태를 확인해주세요.";
+      } else if (error.code === 'storage/quota-exceeded') {
+        errorMessage = "저장 공간이 부족합니다.";
+      } else if (error.code === 'storage/invalid-format') {
+        errorMessage = "지원하지 않는 이미지 형식입니다.";
+      }
+      
+      alert(errorMessage);
     }
   };
 

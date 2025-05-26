@@ -21,6 +21,7 @@ import ThemeSelector from '@/features/SettingPage/ThemeSelector';
 import ProfileActions from '@/features/SettingPage/ProfileActions';
 import ThemedButton from '@/components/ui/ThemedButton';
 import EmotionMigrationTool from '@/components/EmotionMigrationTool';
+import NotificationSettings from '@/components/NotificationSettings';
 import { migrateUserNameToDisplayName } from '@/utils/dataStructureUpgrade';
 import { getModalThemeClass } from '@/utils/themeHelper';
 import { isCurrentUserAdmin } from '@/utils/adminUtils';
@@ -132,6 +133,13 @@ function SettingPage() {
           <h2 className="text-xl font-semibold mb-4">테마 설정</h2>
           <p className="mb-4">원하는 테마를 선택하여 개성을 표현해보세요.</p>
           <ThemeSelector />
+        </section>
+
+        {/* 알림 설정 섹션 */}
+        <section className="p-6 rounded-lg shadow">
+          <h2 className="text-xl font-semibold mb-4">🔔 알림 설정</h2>
+          <p className="mb-4">푸시 알림을 설정하여 실시간으로 소식을 받아보세요.</p>
+          <NotificationSettings />
         </section>
 
         {/* 공지사항 섹션 */}

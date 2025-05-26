@@ -198,13 +198,33 @@ function ButtonLayout({ editor, title, category, editId }) {
       throw new Error(fileValidation.error);
     }
 
+    // 파일명 보안 검증 (경로 순회 공격 방지)
+    if (imageFile.name.includes('..') || imageFile.name.includes('/') || imageFile.name.includes('\\')) {
+      throw new Error("유효하지 않은 파일명입니다.");
+    }
+
+    // 안전한 파일명 생성 (특수문자 제거)
+    const safeFileName = imageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    const uniqueFileName = `${timestamp}_${safeFileName}`;
+
     try {
-      const storageRef = ref(storage, `notes/${user.uid}/${Date.now()}_${imageFile.name}`);
+      const storageRef = ref(storage, `notes/${user.uid}/${uniqueFileName}`);
       await uploadBytes(storageRef, imageFile);
       const url = await getDownloadURL(storageRef);
       return url;
     } catch (error) {
       console.error("이미지 업로드 실패:", error);
+      
+      // 사용자 친화적인 오류 메시지
+      if (error.code === 'storage/unauthorized') {
+        throw new Error("이미지 업로드 권한이 없습니다. 로그인 상태를 확인해주세요.");
+      } else if (error.code === 'storage/quota-exceeded') {
+        throw new Error("저장 공간이 부족합니다.");
+      } else if (error.code === 'storage/invalid-format') {
+        throw new Error("지원하지 않는 이미지 형식입니다.");
+      }
+      
       throw new Error("이미지 업로드에 실패했습니다.");
     }
   };

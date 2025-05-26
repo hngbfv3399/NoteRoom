@@ -3,6 +3,7 @@ import { BrowserRouter } from "react-router-dom";
 import MainLayout from "./rootLayouts/MainLayout";
 import LoadingPage from "./components/LoadingPage";
 import ToastNotification from "./components/ToastNotification";
+import OfflineIndicator from "./components/OfflineIndicator";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./services/firebase";
 import LoginPage from "./pages/auth/LoginPage";
@@ -13,7 +14,6 @@ import { initializeNotifications } from "./utils/pushNotificationUtils";
 
 function App() {
   //NOTE : 유저의 상태를 저장 하는 부분
-  //FIXME : 해당 유저가 신규유저인지 기존 유저인지 복귀유저인지 구분이 안감 처음 읽을떄 헷갈릴듯
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +49,8 @@ function App() {
   return (
     //user가 활성화가 된다면 
     <BrowserRouter>
+      {/* 오프라인 상태 표시 */}
+      <OfflineIndicator />
       {user ? <MainLayout /> : <LoginPage />}
       {/* 전역 토스트 알림 컴포넌트 */}
       <ToastNotification />

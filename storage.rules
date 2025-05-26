@@ -35,7 +35,20 @@ service firebase.storage {
       allow update, delete: if isOwner(userId);
     }
 
-    // 노트 컨텐츠 이미지 규칙 (에디터 내 이미지)
+    // 노트 컨텐츠 이미지 규칙 (에디터 내 이미지) - 새로운 경로
+    match /notes/content/{userId}/{imageId} {
+      // 읽기는 모든 사용자에게 허용 (공개 콘텐츠)
+      allow read: if true;
+      
+      // 쓰기는 파일 소유자만 가능하며, 이미지 타입과 크기 제한 적용
+      allow create: if isOwner(userId)
+        && isImageType()
+        && isValidFileSize();
+      
+      allow update, delete: if isOwner(userId);
+    }
+
+    // 노트 컨텐츠 이미지 규칙 (에디터 내 이미지) - 기존 경로
     match /noteImages/{allPaths=**} {
       // 읽기는 모든 사용자에게 허용 (공개 콘텐츠)
       allow read: if true;

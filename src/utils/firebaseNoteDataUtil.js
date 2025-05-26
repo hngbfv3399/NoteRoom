@@ -351,21 +351,124 @@ export async function updateUserProfile(uid, data) {
 export const uploadImageToFirebase = async (file) => {
   if (!file) throw new Error("파일이 없습니다.");
 
-  const storageRef = ref(storage, `noteImages/${file.name}-${Date.now()}`); // 고유 이름
-  await uploadBytes(storageRef, file);
-  const downloadURL = await getDownloadURL(storageRef);
-  return downloadURL;
+  // 사용자 인증 확인
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("로그인이 필요합니다.");
+
+  // 파일 보안 검증
+  // 파일 크기 검증 (5MB 제한)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("이미지 크기는 5MB를 초과할 수 없습니다.");
+  }
+
+  // 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("지원하지 않는 파일 형식입니다. (JPG, PNG, GIF, WebP만 허용)");
+  }
+
+  // 파일 확장자 검증
+  const fileName = file.name.toLowerCase();
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+  if (!hasValidExtension) {
+    throw new Error("허용되지 않는 파일 확장자입니다.");
+  }
+
+  // 파일명 보안 검증 (경로 순회 공격 방지)
+  if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+    throw new Error("유효하지 않은 파일명입니다.");
+  }
+
+  // 안전한 파일명 생성 (특수문자 제거)
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const timestamp = Date.now();
+  const uniqueFileName = `${safeFileName}-${timestamp}`;
+
+  try {
+    const storageRef = ref(storage, `noteImages/${uniqueFileName}`);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    console.error("이미지 업로드 실패:", error);
+    
+    // 사용자 친화적인 오류 메시지
+    if (error.code === 'storage/unauthorized') {
+      throw new Error("이미지 업로드 권한이 없습니다. 로그인 상태를 확인해주세요.");
+    } else if (error.code === 'storage/quota-exceeded') {
+      throw new Error("저장 공간이 부족합니다.");
+    } else if (error.code === 'storage/invalid-format') {
+      throw new Error("지원하지 않는 이미지 형식입니다.");
+    }
+    
+    throw new Error("이미지 업로드에 실패했습니다.");
+  }
 };
 
 // 프로필 이미지 업로드 함수 추가
 export const uploadProfileImageToFirebase = async (file, userId) => {
   if (!file) throw new Error("파일이 없습니다.");
   
-  // 프로필 이미지는 별도 폴더에 저장
-  const storageRef = ref(storage, `profiles/${userId}/profile-${Date.now()}`);
-  await uploadBytes(storageRef, file);
-  const downloadURL = await getDownloadURL(storageRef);
-  return downloadURL;
+  // 사용자 인증 확인
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("로그인이 필요합니다.");
+  
+  // 본인의 프로필만 업데이트 가능
+  if (currentUser.uid !== userId) {
+    throw new Error("본인의 프로필만 수정할 수 있습니다.");
+  }
+
+  // 파일 보안 검증
+  // 파일 크기 검증 (5MB 제한)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("이미지 크기는 5MB를 초과할 수 없습니다.");
+  }
+
+  // 파일 타입 검증 (MIME 타입과 확장자 이중 검증)
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("지원하지 않는 파일 형식입니다. (JPG, PNG, GIF, WebP만 허용)");
+  }
+
+  // 파일 확장자 검증
+  const fileName = file.name.toLowerCase();
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+  if (!hasValidExtension) {
+    throw new Error("허용되지 않는 파일 확장자입니다.");
+  }
+
+  // 파일명 보안 검증 (경로 순회 공격 방지)
+  if (file.name.includes('..') || file.name.includes('/') || file.name.includes('\\')) {
+    throw new Error("유효하지 않은 파일명입니다.");
+  }
+
+  // 안전한 파일명 생성 (특수문자 제거)
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const timestamp = Date.now();
+  const uniqueFileName = `profile-${timestamp}-${safeFileName}`;
+
+  try {
+    // 프로필 이미지는 별도 폴더에 저장
+    const storageRef = ref(storage, `profiles/${userId}/${uniqueFileName}`);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error) {
+    console.error("프로필 이미지 업로드 실패:", error);
+    
+    // 사용자 친화적인 오류 메시지
+    if (error.code === 'storage/unauthorized') {
+      throw new Error("이미지 업로드 권한이 없습니다. 로그인 상태를 확인해주세요.");
+    } else if (error.code === 'storage/quota-exceeded') {
+      throw new Error("저장 공간이 부족합니다.");
+    } else if (error.code === 'storage/invalid-format') {
+      throw new Error("지원하지 않는 이미지 형식입니다.");
+    }
+    
+    throw new Error("프로필 이미지 업로드에 실패했습니다.");
+  }
 };
 
 export const signOut = async () => {
@@ -530,7 +633,8 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
         commentId,
         targetComment.userUid, // 댓글 작성자 ID
         currentUser.uid, // 대댓글 작성자 ID
-        replyContent.trim()
+        replyContent.trim(),
+        noteId // 노트 ID 추가
       );
     } catch (notificationError) {
       console.warn("대댓글 알림 생성 실패:", notificationError);

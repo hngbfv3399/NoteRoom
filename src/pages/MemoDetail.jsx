@@ -403,17 +403,6 @@ function MemoDetail({ note: propNote }) {
         )}
       </div>
 
-      {/* 노트 이미지 */}
-      {note.image && (
-        <div className="mb-6">
-          <img
-            src={note.image}
-            alt={note.title || "노트 이미지"}
-            className="w-full h-80 object-cover rounded"
-            loading="lazy"
-          />
-        </div>
-      )}
 
       {/* 노트 내용 */}
       <div

@@ -13,7 +13,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import { auth } from '@/services/firebase';
 import { 
@@ -109,13 +109,13 @@ function NotificationBell() {
 
     // 알림 타입에 따른 페이지 이동
     if (notification.noteId) {
-      // 새 노트 알림인 경우
+      // 새 노트 알림이거나 노트 ID가 있는 알림인 경우
       window.location.href = `/note/${notification.noteId}`;
     } else if (notification.contentId && notification.contentType === 'note') {
       // 댓글, 멘션 등 노트 관련 알림인 경우
       window.location.href = `/note/${notification.contentId}`;
-    } else if (notification.fromUser) {
-      // 사용자 관련 알림인 경우 (팔로우 등)
+    } else if (notification.fromUser && (notification.type === 'follow' || notification.type === 'like')) {
+      // 팔로우, 좋아요 등 사용자 관련 알림인 경우만 프로필로 이동
       window.location.href = `/profile/${notification.fromUser}`;
     } else {
       // 기본적으로 홈으로 이동
@@ -192,7 +192,7 @@ function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       {/* 알림 벨 버튼 */}
-      <motion.button
+      <button
         onClick={handleBellClick}
         className={`
           relative p-2 rounded-full transition-all duration-200
@@ -200,8 +200,6 @@ function NotificationBell() {
           ${currentTheme?.buttonText || 'text-gray-700'}
           hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-blue-500
         `}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
       >
         {/* 벨 아이콘 */}
         <svg 
@@ -220,30 +218,23 @@ function NotificationBell() {
 
         {/* 읽지 않은 알림 개수 배지 */}
         {unreadCount > 0 && (
-          <motion.div
+          <div
             className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
           >
             {unreadCount > 99 ? '99+' : unreadCount}
-          </motion.div>
+          </div>
         )}
-      </motion.button>
+      </button>
 
       {/* 알림 드롭다운 */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <div
             className={`
               absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto
               ${currentTheme?.modalBgColor || 'bg-white'} 
               rounded-lg shadow-xl border border-gray-200 z-50
             `}
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
           >
             {/* 헤더 */}
             <div className={`p-4 border-b border-gray-200 ${currentTheme?.textPrimary || 'text-gray-900'}`}>
@@ -283,7 +274,7 @@ function NotificationBell() {
                 </div>
               ) : (
                 notifications.map((notification) => (
-                  <motion.div
+                  <div
                     key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
                     className={`
@@ -316,7 +307,7 @@ function NotificationBell() {
                         <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2"></div>
                       )}
                     </div>
-                  </motion.div>
+                  </div>
                 ))
               )}
             </div>
@@ -335,7 +326,7 @@ function NotificationBell() {
                 </button>
               </div>
             )}
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

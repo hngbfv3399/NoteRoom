@@ -88,7 +88,7 @@ export const createCommentNotification = async (noteId, noteAuthorId, commentAut
 };
 
 // 대댓글 알림 생성
-export const createReplyNotification = async (commentId, commentAuthorId, replyAuthorId, replyContent) => {
+export const createReplyNotification = async (commentId, commentAuthorId, replyAuthorId, replyContent, noteId = null) => {
   try {
     // 자신의 댓글에 자신이 대댓글을 단 경우 알림 생성하지 않음
     if (commentAuthorId === replyAuthorId) {
@@ -106,6 +106,7 @@ export const createReplyNotification = async (commentId, commentAuthorId, replyA
       fromUser: replyAuthorId,
       contentId: commentId,
       contentType: 'comment',
+      noteId: noteId,
       message: `${replyAuthorName}님이 회원님의 댓글에 답글을 달았습니다.`,
       preview: replyContent.substring(0, 50) + (replyContent.length > 50 ? '...' : ''),
       isRead: false,
@@ -114,7 +115,7 @@ export const createReplyNotification = async (commentId, commentAuthorId, replyA
 
     // 브라우저 푸시 알림 표시
     try {
-      await showReplyNotification(replyAuthorName, replyContent, commentId);
+      await showReplyNotification(replyAuthorName, replyContent, noteId || commentId);
     } catch (pushError) {
       console.warn('브라우저 푸시 알림 실패:', pushError);
     }

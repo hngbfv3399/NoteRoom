@@ -241,5 +241,21 @@ service cloud.firestore {
       // 삭제: 구독자 본인만 가능 (구독 취소)
       allow delete: if isAuthenticated() && resource.data.subscriber == request.auth.uid;
     }
+
+    // 푸시 구독 정보 컬렉션 규칙
+    match /pushSubscriptions/{userId} {
+      // 읽기: 본인 또는 관리자만 가능
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      
+      // 생성/수정: 본인만 가능
+      allow create, update: if isAuthenticated() 
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.subscription is map
+        && request.resource.data.subscription.endpoint is string;
+      
+      // 삭제: 본인 또는 관리자만 가능
+      allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
   }
 }
