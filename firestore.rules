@@ -47,7 +47,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.auth.uid == userId;
       
       // 업데이트 규칙 - 더 유연한 감정 데이터 처리
-      allow update: if isOwner(userId) && (
+      allow update: if (isOwner(userId) && (
         // 1. 일반 프로필 업데이트 (감정 데이터 제외)
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emotionDistribution', 'emotionTracking']) ||
         
@@ -75,6 +75,9 @@ service cloud.firestore {
         // 9. 감정 관련 필드들의 부분 업데이트 허용
         request.resource.data.diff(resource.data).affectedKeys().hasAny(['emotionDistribution', 'emotionTracking', 'mood']) &&
         request.resource.data.diff(resource.data).affectedKeys().size() <= 3
+      )) || (
+        // 관리자는 마이그레이션을 위해 구독 관련 필드 업데이트 가능
+        isAdmin() && isSafeFieldUpdate(['subscriberCount', 'subscriptionCount', 'migratedAt'])
       );
       
       allow delete: if isOwner(userId);
@@ -104,7 +107,9 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'updatedAt'])
         )) ||
         // 다른 사용자는 상호작용 관련 필드만 수정 가능
-        isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment'])
+        isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment']) ||
+        // 관리자는 댓글 마이그레이션을 위해 comment 필드와 마이그레이션 관련 필드 업데이트 가능
+        (isAdmin() && isSafeFieldUpdate(['comment', 'commentMigratedAt']))
       );
       
       // 삭제는 작성자만 가능
@@ -128,10 +133,22 @@ service cloud.firestore {
 
     // 알림 컬렉션 규칙 (필요시 추가)
     match /notifications/{notificationId} {
-      allow read: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
+      // 읽기: 알림 대상자 본인만 가능
+      allow read: if isAuthenticated() && resource.data.targetUser == request.auth.uid;
+      
+      // 생성: 시스템에서 자동 생성 (인증된 사용자)
+      allow create: if isAuthenticated()
+        && request.resource.data.targetUser is string
+        && request.resource.data.type is string
+        && request.resource.data.fromUser == request.auth.uid;
+      
+      // 수정: 알림 대상자가 읽음 상태만 변경 가능
+      allow update: if isAuthenticated() 
+        && resource.data.targetUser == request.auth.uid
+        && isSafeFieldUpdate(['isRead', 'readAt']);
+      
+      // 삭제: 알림 대상자 본인만 가능
+      allow delete: if isAuthenticated() && resource.data.targetUser == request.auth.uid;
     }
 
     // 공지사항 컬렉션 규칙
@@ -204,6 +221,25 @@ service cloud.firestore {
       
       // 삭제: 관리자 또는 신고자 본인만 가능 (신고 취소)
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+    }
+
+    // 구독 컬렉션 규칙
+    match /subscriptions/{subscriptionId} {
+      // 읽기: 구독자 본인 또는 관리자만 가능
+      allow read: if isAuthenticated() && (
+        resource.data.subscriber == request.auth.uid ||
+        resource.data.target == request.auth.uid ||
+        isAdmin()
+      );
+      
+      // 생성: 인증된 사용자가 자신의 구독만 생성 가능
+      allow create: if isAuthenticated() 
+        && request.resource.data.subscriber == request.auth.uid
+        && request.resource.data.target is string
+        && request.resource.data.type is string;
+      
+      // 삭제: 구독자 본인만 가능 (구독 취소)
+      allow delete: if isAuthenticated() && resource.data.subscriber == request.auth.uid;
     }
   }
 }

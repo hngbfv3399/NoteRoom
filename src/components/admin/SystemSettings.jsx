@@ -19,7 +19,8 @@ import {
 import { 
   manageBlockedIPs, 
   manageKeywordFilters, 
-  manageSystemSettings 
+  manageSystemSettings,
+  dataMigration
 } from '@/utils/adminUtils';
 
 function SystemSettings() {
@@ -116,10 +117,80 @@ function SystemSettings() {
     }
   };
 
+  // 구독 시스템 마이그레이션
+  const handleSubscriptionMigration = async () => {
+    if (!confirm('구독 시스템 마이그레이션을 실행하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const result = await dataMigration.migrateSubscriptionSystem();
+      
+      if (result.success) {
+        alert(`구독 시스템 마이그레이션 완료! ${result.updatedCount}명의 사용자 데이터가 업데이트되었습니다.`);
+      }
+      
+    } catch (error) {
+      console.error('구독 시스템 마이그레이션 실패:', error);
+      alert('마이그레이션 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 알림 시스템 초기화
+  const handleNotificationMigration = async () => {
+    if (!confirm('알림 시스템을 초기화하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const result = await dataMigration.initializeNotificationSystem();
+      
+      if (result.success) {
+        alert('알림 시스템 초기화가 완료되었습니다!');
+      }
+      
+    } catch (error) {
+      console.error('알림 시스템 초기화 실패:', error);
+      alert('초기화 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 댓글 시스템 마이그레이션
+  const handleCommentMigration = async () => {
+    if (!confirm('댓글 시스템 마이그레이션을 실행하시겠습니까? 기존 댓글들에 ID와 대댓글 필드가 추가됩니다.')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const result = await dataMigration.migrateCommentSystem();
+      
+      if (result.success) {
+        alert(`댓글 시스템 마이그레이션 완료! ${result.updatedNotesCount}개의 노트에서 ${result.updatedCommentsCount}개의 댓글이 업데이트되었습니다.`);
+      }
+      
+    } catch (error) {
+      console.error('댓글 시스템 마이그레이션 실패:', error);
+      alert('마이그레이션 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'security', title: '보안 정책', icon: FiShield },
     { id: 'ip', title: 'IP 차단', icon: FiGlobe },
-    { id: 'keywords', title: '키워드 필터', icon: FiFilter }
+    { id: 'keywords', title: '키워드 필터', icon: FiFilter },
+    { id: 'migration', title: '데이터 마이그레이션', icon: FiSettings }
   ];
 
   if (loading) {
@@ -415,6 +486,104 @@ function SystemSettings() {
               </p>
             </div>
           )}
+        </motion.div>
+      )}
+
+      {/* 데이터 마이그레이션 탭 */}
+      {activeTab === 'migration' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-6 rounded-xl border ${currentTheme?.modalBgColor || 'bg-white'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
+        >
+          <h3 className={`text-lg font-semibold mb-6 ${currentTheme?.textColor || 'text-gray-900'}`}>
+            데이터 마이그레이션
+          </h3>
+
+          <div className="space-y-6">
+            {/* 구독 시스템 마이그레이션 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                구독 시스템 마이그레이션
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                기존 사용자 데이터에 구독 시스템 필드를 추가합니다. (subscriberCount, subscriptionCount)
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleSubscriptionMigration}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-blue-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '마이그레이션 중...' : '구독 시스템 마이그레이션 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  ⚠️ 이 작업은 되돌릴 수 없습니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 알림 시스템 마이그레이션 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                알림 시스템 초기화
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                알림 컬렉션을 초기화하고 기본 설정을 적용합니다.
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleNotificationMigration}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-green-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '초기화 중...' : '알림 시스템 초기화'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  💡 안전한 작업입니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 댓글 시스템 마이그레이션 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                댓글 시스템 마이그레이션
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                기존 댓글들에 고유 ID와 대댓글 필드를 추가합니다. (id, replies, replyCount)
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleCommentMigration}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-purple-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '마이그레이션 중...' : '댓글 시스템 마이그레이션 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  ⚠️ 이 작업은 되돌릴 수 없습니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 마이그레이션 상태 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-blue-50'} ${currentTheme?.inputBorder || 'border-blue-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-blue-900'}`}>
+                마이그레이션 가이드
+              </h4>
+              <ul className={`text-sm space-y-2 ${currentTheme?.textColor || 'text-blue-800'}`}>
+                <li>• 구독 시스템: 모든 사용자에게 subscriberCount: 0, subscriptionCount: 0 추가</li>
+                <li>• 알림 시스템: notifications 컬렉션 생성 및 기본 설정</li>
+                <li>• 댓글 시스템: 기존 댓글에 id, replies, replyCount 필드 추가</li>
+                <li>• 마이그레이션 전 데이터베이스 백업을 권장합니다</li>
+                <li>• 마이그레이션 중에는 서비스 이용이 제한될 수 있습니다</li>
+              </ul>
+            </div>
+          </div>
         </motion.div>
       )}
     </div>

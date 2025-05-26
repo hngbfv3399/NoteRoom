@@ -66,7 +66,7 @@ function MainHome() {
   const quickButtons = [
     { label: "최신 노트", action: onSortNew, icon: "🆕" },
     { label: "인기 노트", action: onSortHot, icon: "🔥" },
-    { label: "감정 추적", action: goToEmotionTracking, icon: "��" },
+    { label: "감정 추적", action: goToEmotionTracking, icon: "🎭" },
     { label: "공지사항", action: goToAnnouncement, icon: "📢" },
   ];
 

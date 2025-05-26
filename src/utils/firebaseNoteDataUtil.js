@@ -20,6 +20,7 @@ import { auth, db, storage } from "../services/firebase";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { createEmotionDistribution, createEmotionTracking } from "./emotionConstants";
+import { createCommentNotification, createNewNoteNotification } from "./notificationUtils";
 
 export const addCommentToNote = async (noteId, commentContent) => {
   const currentUser = auth.currentUser;
@@ -32,22 +33,51 @@ export const addCommentToNote = async (noteId, commentContent) => {
   const userDoc = await getDoc(userDocRef);
   const userData = userDoc.data();
 
+  // 노트 정보 가져오기 (알림을 위해)
+  const noteDocRef = doc(db, "notes", noteId);
+  const noteDoc = await getDoc(noteDocRef);
+  const noteData = noteDoc.data();
+
+  if (!noteData) {
+    throw new Error("노트를 찾을 수 없습니다.");
+  }
+
   const commentData = {
+    id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
     userUid: currentUser.uid,
     userName: userData?.displayName || currentUser.displayName || "익명",
     content: commentContent.trim(),
     createdAt: new Date(),
+    replies: [], // 대댓글 배열 추가
+    replyCount: 0, // 대댓글 수 추가
   };
 
-  const noteDocRef = doc(db, "notes", noteId);
-
   try {
+    // 댓글 추가
     await updateDoc(noteDocRef, {
       comment: arrayUnion(commentData),
       commentCount: increment(1),
     });
+
+    // 알림 생성 (노트 작성자에게)
+    try {
+      await createCommentNotification(
+        noteId,
+        noteData.userUid || noteData.userId, // 노트 작성자 ID
+        currentUser.uid, // 댓글 작성자 ID
+        commentContent.trim()
+      );
+    } catch (notificationError) {
+      console.warn("댓글 알림 생성 실패:", notificationError);
+      // 알림 생성 실패해도 댓글 작성은 성공으로 처리
+      // 토스트 알림은 createCommentNotification 내부에서 처리됨
+    }
   } catch (error) {
     console.error("댓글 추가 실패:", error);
+    // 토스트 알림 표시
+    if (typeof window !== 'undefined' && window.showToast) {
+      window.showToast('댓글 작성에 실패했습니다. 다시 시도해주세요.', 'error');
+    }
     throw error;
   }
 };
@@ -89,10 +119,28 @@ export const saveNoteToFirestore = async (noteData) => {
       noteCount: increment(1)
     });
     
+    // 구독자들에게 새 노트 알림 생성
+    try {
+      await createNewNoteNotification(
+        docRef.id,
+        currentUser.uid,
+        noteData.title,
+        noteData.content
+      );
+    } catch (notificationError) {
+      console.warn("새 노트 알림 생성 실패:", notificationError);
+      // 알림 생성 실패해도 노트 작성은 성공으로 처리
+      // 토스트 알림은 createNewNoteNotification 내부에서 처리됨
+    }
+    
     console.log("노트 저장 완료 및 사용자 noteCount 증가:", docRef.id);
     return docRef.id;
   } catch (error) {
     console.error("Firestore 저장 실패:", error);
+    // 토스트 알림 표시
+    if (typeof window !== 'undefined' && window.showToast) {
+      window.showToast('노트 저장에 실패했습니다. 다시 시도해주세요.', 'error');
+    }
     throw error;
   }
 };
@@ -418,6 +466,82 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
     return true;
   } catch (error) {
     console.error("노트 업데이트 실패:", error);
+    throw error;
+  }
+};
+
+// 대댓글 추가 함수
+export const addReplyToComment = async (noteId, commentId, replyContent) => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) throw new Error("로그인이 필요합니다.");
+
+  if (!replyContent.trim()) throw new Error("답글 내용을 입력해주세요.");
+
+  // 사용자 문서에서 displayName 가져오기
+  const userDocRef = doc(db, "users", currentUser.uid);
+  const userDoc = await getDoc(userDocRef);
+  const userData = userDoc.data();
+
+  // 노트 정보 가져오기
+  const noteDocRef = doc(db, "notes", noteId);
+  const noteDoc = await getDoc(noteDocRef);
+  const noteData = noteDoc.data();
+
+  if (!noteData) {
+    throw new Error("노트를 찾을 수 없습니다.");
+  }
+
+  // 해당 댓글 찾기
+  const comments = noteData.comment || [];
+  const commentIndex = comments.findIndex(comment => comment.id === commentId);
+  
+  if (commentIndex === -1) {
+    throw new Error("댓글을 찾을 수 없습니다.");
+  }
+
+  const targetComment = comments[commentIndex];
+  
+  const replyData = {
+    id: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
+    userUid: currentUser.uid,
+    userName: userData?.displayName || currentUser.displayName || "익명",
+    content: replyContent.trim(),
+    createdAt: new Date(),
+  };
+
+  try {
+    // 댓글 배열 업데이트
+    const updatedComments = [...comments];
+    if (!updatedComments[commentIndex].replies) {
+      updatedComments[commentIndex].replies = [];
+    }
+    updatedComments[commentIndex].replies.push(replyData);
+    updatedComments[commentIndex].replyCount = (updatedComments[commentIndex].replyCount || 0) + 1;
+
+    // Firestore 업데이트
+    await updateDoc(noteDocRef, {
+      comment: updatedComments,
+    });
+
+    // 대댓글 알림 생성 (댓글 작성자에게)
+    try {
+      const { createReplyNotification } = await import('./notificationUtils');
+      await createReplyNotification(
+        commentId,
+        targetComment.userUid, // 댓글 작성자 ID
+        currentUser.uid, // 대댓글 작성자 ID
+        replyContent.trim()
+      );
+    } catch (notificationError) {
+      console.warn("대댓글 알림 생성 실패:", notificationError);
+      // 알림 생성 실패해도 대댓글 작성은 성공으로 처리
+    }
+  } catch (error) {
+    console.error("대댓글 추가 실패:", error);
+    // 토스트 알림 표시
+    if (typeof window !== 'undefined' && window.showToast) {
+      window.showToast('답글 작성에 실패했습니다. 다시 시도해주세요.', 'error');
+    }
     throw error;
   }
 };

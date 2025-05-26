@@ -9,6 +9,7 @@
  * - 실시간 시간 표시
  * - 테마 시스템 적용
  * - 두 섹션으로 분리된 레이아웃 (프로필 + 노트)
+ * - 구독 시스템 지원
  * 
  * NOTE: NoteModal 컴포넌트로 모달 분리 완료
  * TODO: 에러 처리 개선, 로딩 상태 세분화, 무한 스크롤 추가
@@ -24,6 +25,7 @@ import NoteGrid from "@/features/UserProfile/NoteGrid";
 import NoteEditModal from "@/components/NoteEditModal";
 import EmotionSelectionModal from "@/features/EmotionTracking/EmotionSelectionModal";
 import ProfileSkeleton from "@/features/UserProfile/ProfileSkeleton";
+import SubscribeButton from "@/components/SubscribeButton";
 import { getThemeClass } from "@/utils/themeHelper";
 import { useNoteInteraction } from "@/hooks/useNoteInteraction";
 import { ROUTES } from '@/constants/routes';
@@ -105,6 +107,8 @@ function UserProfile() {
         noteCount: actualNoteCount, // 업데이트된 실제 노트 수 사용
         themeColor: userFromDB.themeColor ?? "defaultThemeColor",
         profileImage: userFromDB.profileImage ?? "",
+        subscriberCount: userFromDB.subscriberCount ?? 0, // 구독자 수 추가
+        subscriptionCount: userFromDB.subscriptionCount ?? 0, // 구독 수 추가
       });
     } catch (error) {
       setError("사용자 데이터를 불러오는 중 오류가 발생했습니다.");
@@ -210,6 +214,14 @@ function UserProfile() {
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${randomColor}`;
   };
 
+  // 구독 상태 변경 핸들러
+  const handleSubscriptionChange = useCallback((isSubscribed, newSubscriberCount) => {
+    setUserData(prev => ({
+      ...prev,
+      subscriberCount: newSubscriberCount
+    }));
+  }, []);
+
   // 로딩 상태 처리
   if (isLoading) return <ProfileSkeleton />;
   
@@ -289,11 +301,21 @@ function UserProfile() {
         
         {/* 프로필 정보 카드 */}
         <div className="relative z-10 flex-1 flex items-center justify-center px-4 py-8">
-          <ProfileInfoCard 
-            userData={userData} 
-            currentTime={currentTime}
-            onOpenEmotionModal={isOwnProfile ? handleOpenEmotionModal : null}
-          />
+          <div className="flex flex-col items-center space-y-6">
+            <ProfileInfoCard 
+              userData={userData} 
+              currentTime={currentTime}
+              onOpenEmotionModal={isOwnProfile ? handleOpenEmotionModal : null}
+            />
+            
+            {/* 구독 버튼 */}
+            <SubscribeButton
+              targetUserId={userId}
+              targetUserName={userData.displayName}
+              subscriberCount={userData.subscriberCount}
+              onSubscriptionChange={handleSubscriptionChange}
+            />
+          </div>
         </div>
 
         {/* 하단 스크롤 안내 */}

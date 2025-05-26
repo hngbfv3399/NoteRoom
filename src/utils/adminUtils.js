@@ -3,7 +3,7 @@
  * 보안 모니터링, 사용자 관리, 콘텐츠 관리 등의 기능을 제공합니다.
  */
 
-import { collection, query, where, orderBy, limit, getDocs, doc, updateDoc, deleteDoc, getDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, doc, updateDoc, deleteDoc, getDoc, addDoc, Timestamp, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { sanitizeLogData } from './security';
 
@@ -677,5 +677,169 @@ export const getSecurityLogs = async (timeRange = 24) => {
   } catch (error) {
     console.error('보안 로그 조회 실패:', error);
     return [];
+  }
+};
+
+// 데이터 마이그레이션 관리
+export const dataMigration = {
+  // 구독 시스템 마이그레이션
+  async migrateSubscriptionSystem() {
+    try {
+      const usersRef = collection(db, 'users');
+      const snapshot = await getDocs(usersRef);
+      
+      const batch = writeBatch(db);
+      let updatedCount = 0;
+      
+      snapshot.docs.forEach((userDoc) => {
+        const userData = userDoc.data();
+        
+        // 이미 마이그레이션된 사용자는 건너뛰기
+        if (userData.subscriberCount !== undefined && userData.subscriptionCount !== undefined) {
+          return;
+        }
+        
+        const userRef = doc(db, 'users', userDoc.id);
+        batch.update(userRef, {
+          subscriberCount: 0,
+          subscriptionCount: 0,
+          migratedAt: serverTimestamp()
+        });
+        updatedCount++;
+      });
+      
+      if (updatedCount > 0) {
+        await batch.commit();
+      }
+      
+      return { success: true, updatedCount };
+    } catch (error) {
+      console.error('구독 시스템 마이그레이션 실패:', error);
+      throw error;
+    }
+  },
+
+  // 알림 시스템 초기화
+  async initializeNotificationSystem() {
+    try {
+      // 알림 시스템 설정 생성
+      const notificationSettingsRef = doc(db, 'systemSettings', 'notifications');
+      await setDoc(notificationSettingsRef, {
+        enabled: true,
+        types: {
+          comment: { 
+            enabled: true, 
+            title: '댓글 알림',
+            description: '내 글에 댓글이 달렸을 때'
+          },
+          reply: { 
+            enabled: true, 
+            title: '대댓글 알림',
+            description: '내 댓글에 대댓글이 달렸을 때'
+          },
+          mention: { 
+            enabled: true, 
+            title: '멘션 알림',
+            description: '다른 글이나 댓글에서 나를 언급했을 때'
+          }
+        },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('알림 시스템 초기화 실패:', error);
+      throw error;
+    }
+  },
+
+  // 댓글 시스템 마이그레이션
+  async migrateCommentSystem() {
+    try {
+      const notesRef = collection(db, 'notes');
+      const snapshot = await getDocs(notesRef);
+      
+      const batch = writeBatch(db);
+      let updatedNotesCount = 0;
+      let updatedCommentsCount = 0;
+      
+      snapshot.docs.forEach((noteDoc) => {
+        const noteData = noteDoc.data();
+        const comments = noteData.comment || [];
+        
+        // 댓글이 없거나 이미 마이그레이션된 경우 건너뛰기
+        if (comments.length === 0 || (comments[0] && comments[0].id)) {
+          return;
+        }
+        
+        // 각 댓글에 ID와 대댓글 필드 추가
+        const migratedComments = comments.map((comment, index) => {
+          // 이미 ID가 있는 댓글은 건너뛰기
+          if (comment.id) {
+            return comment;
+          }
+          
+          updatedCommentsCount++;
+          
+          return {
+            ...comment,
+            id: `comment_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+            replies: comment.replies || [],
+            replyCount: comment.replyCount || 0
+          };
+        });
+        
+        const noteRef = doc(db, 'notes', noteDoc.id);
+        batch.update(noteRef, {
+          comment: migratedComments,
+          commentMigratedAt: serverTimestamp()
+        });
+        updatedNotesCount++;
+      });
+      
+      if (updatedNotesCount > 0) {
+        await batch.commit();
+      }
+      
+      return { 
+        success: true, 
+        updatedNotesCount, 
+        updatedCommentsCount 
+      };
+    } catch (error) {
+      console.error('댓글 시스템 마이그레이션 실패:', error);
+      throw error;
+    }
+  },
+
+  // 마이그레이션 상태 확인
+  async checkMigrationStatus() {
+    try {
+      const usersRef = collection(db, 'users');
+      const snapshot = await getDocs(usersRef);
+      
+      let totalUsers = 0;
+      let migratedUsers = 0;
+      
+      snapshot.docs.forEach((userDoc) => {
+        const userData = userDoc.data();
+        totalUsers++;
+        
+        if (userData.subscriberCount !== undefined && userData.subscriptionCount !== undefined) {
+          migratedUsers++;
+        }
+      });
+      
+      return {
+        totalUsers,
+        migratedUsers,
+        needsMigration: totalUsers - migratedUsers,
+        migrationComplete: migratedUsers === totalUsers
+      };
+    } catch (error) {
+      console.error('마이그레이션 상태 확인 실패:', error);
+      throw error;
+    }
   }
 }; 

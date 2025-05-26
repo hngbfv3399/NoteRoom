@@ -7,7 +7,6 @@ import React, { useState, useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import { FiFlag } from 'react-icons/fi';
 import ReportModal from './ReportModal';
-import { selectTextColor, selectInputBorder } from '@/store/selectors';
 import { auth } from '@/services/firebase';
 
 function ReportButton({ 
@@ -20,9 +19,9 @@ function ReportButton({
 }) {
   const [showReportModal, setShowReportModal] = useState(false);
   
-  // 개별 selector 사용으로 안정적인 참조 보장
-  const textColor = useSelector(selectTextColor);
-  const inputBorder = useSelector(selectInputBorder);
+  // 전체 테마 객체 가져오기
+  const { current, themes } = useSelector((state) => state.theme);
+  const currentTheme = themes[current];
 
   // 신고 버튼 클릭 핸들러
   const handleReportClick = (e) => {
@@ -48,19 +47,19 @@ function ReportButton({
     lg: 'p-4 text-lg'
   };
 
-  // 변형별 스타일 - useMemo로 메모이제이션
+  // 변형별 스타일 - 테마 시스템 적용
   const variantStyles = useMemo(() => ({
-    ghost: `hover:bg-gray-100 ${textColor || 'text-gray-500'} hover:text-red-500`,
-    outline: `border ${inputBorder || 'border-gray-300'} ${textColor || 'text-gray-600'} hover:border-red-500 hover:text-red-500 hover:bg-red-50`,
-    solid: 'bg-red-100 text-red-600 hover:bg-red-200'
-  }), [textColor, inputBorder]);
+    ghost: `${currentTheme?.hoverBg || 'hover:bg-gray-100'} ${currentTheme?.textSecondary || 'text-gray-500'} hover:text-red-500 transition-colors`,
+    outline: `border ${currentTheme?.borderColor || 'border-gray-300'} ${currentTheme?.textColor || 'text-gray-600'} hover:border-red-500 hover:text-red-500 hover:bg-red-50 transition-colors`,
+    solid: `bg-red-100 text-red-600 hover:bg-red-200 ${currentTheme?.borderColor || 'border-red-200'} border transition-colors`
+  }), [currentTheme]);
 
   return (
     <>
       <button
         onClick={handleReportClick}
         className={`
-          inline-flex items-center justify-center rounded-lg transition-colors
+          inline-flex items-center justify-center rounded-lg transition-all duration-200
           ${sizeStyles[size]}
           ${variantStyles[variant]}
           ${className}
