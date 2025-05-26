@@ -14,12 +14,14 @@ import { Link } from "react-router-dom";
 import { getThemeClass } from "@/utils/themeHelper";
 import { auth } from "@/services/firebase";
 import { useEffect, useState } from "react";
+import { ROUTES } from '@/constants/routes';
 
 // react-icons import
 import { AiFillHome } from "react-icons/ai";
 import { FaRegFileAlt, FaUserCircle } from "react-icons/fa";
 import { MdCreate } from "react-icons/md";
 import { FiSettings } from "react-icons/fi";
+import { BsEmojiSmile } from "react-icons/bs";
 
 function NavbarLayout() {
   const { current, themes } = useSelector((state) => state.theme);
@@ -37,12 +39,13 @@ function NavbarLayout() {
   const themeClass = themes[current] ? getThemeClass(themes[current]) : "";
 
   return (
-    <div className={`${themeClass} h-full flex items-center justify-around px-6`}>
-      <NavLink to="/" icon={<AiFillHome size={24} />} label="홈" />
-      <NavLink to="/thread" icon={<FaRegFileAlt size={24} />} label="스레드" />
-      <NavLink to="/write" icon={<MdCreate size={24} />} label="작성" />
-      <NavLink to={userId ? `/profile/${userId}` : "/setting"} icon={<FaUserCircle size={24} />} label="프로필" />
-      <NavLink to="/setting" icon={<FiSettings size={24} />} label="설정" />
+    <div className={`${themeClass} h-full flex items-center justify-around px-4`}>
+      <NavLink to="/" icon={<AiFillHome size={22} />} label="홈" />
+      <NavLink to={ROUTES.THREAD} icon={<FaRegFileAlt size={22} />} label="스레드" />
+      <NavLink to={ROUTES.WRITE} icon={<MdCreate size={22} />} label="작성" />
+      <NavLink to={ROUTES.EMOTION} icon={<BsEmojiSmile size={22} />} label="감정" />
+      <NavLink to={userId ? `/profile/${userId}` : ROUTES.SETTING} icon={<FaUserCircle size={22} />} label="프로필" />
+      <NavLink to={ROUTES.SETTING} icon={<FiSettings size={22} />} label="설정" />
     </div>
   );
 }
@@ -51,7 +54,7 @@ function NavLink({ to, icon, label }) {
   return (
     <Link 
       to={to} 
-      className="flex flex-col items-center gap-1 transition-colors"
+      className="flex flex-col items-center gap-1 transition-colors hover:opacity-80"
     >
       <span className="text-2xl">{icon}</span>
       <span className="text-xs font-medium">{label}</span>

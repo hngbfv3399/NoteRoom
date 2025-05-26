@@ -1,8 +1,8 @@
 // ThemeSelector.jsx
 import { useDispatch, useSelector } from "react-redux";
 import { setTheme } from "@/store/theme/slice";
-import { db,auth } from "@/services/firebase";
-import { doc,updateDoc } from "firebase/firestore";
+import { db, auth } from "@/services/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 
 function ThemeSelector() {
   const dispatch = useDispatch();

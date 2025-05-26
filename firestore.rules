@@ -12,11 +12,71 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // 관리자 권한 확인 함수 - 보안 강화
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // 감정 분포 데이터 유효성 검증 함수
+    function isValidEmotionDistribution() {
+      return request.resource.data.emotionDistribution is map &&
+             request.resource.data.emotionDistribution.keys().hasAll(['joy', 'sadness', 'anger', 'excited', 'calm', 'stressed', 'grateful', 'anxious', 'confident', 'lonely', 'hopeful', 'tired']);
+    }
+
+    // 감정 추적 데이터 유효성 검증 함수
+    function isValidEmotionTracking() {
+      return request.resource.data.emotionTracking is map &&
+             request.resource.data.emotionTracking.dailyEmotions is list &&
+             request.resource.data.emotionTracking.settings is map;
+    }
+
+    // 감정 데이터 전체 유효성 검증 함수
+    function isValidEmotionData() {
+      return isValidEmotionDistribution() && isValidEmotionTracking();
+    }
+
+    // 안전한 필드 업데이트인지 확인하는 함수
+    function isSafeFieldUpdate(allowedFields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+
     // 사용자 프로필 컬렉션 규칙
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isOwner(userId);
+      
+      // 업데이트 규칙 - 더 유연한 감정 데이터 처리
+      allow update: if isOwner(userId) && (
+        // 1. 일반 프로필 업데이트 (감정 데이터 제외)
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emotionDistribution', 'emotionTracking']) ||
+        
+        // 2. 감정 분포만 업데이트
+        isSafeFieldUpdate(['emotionDistribution']) ||
+        
+        // 3. 감정 추적만 업데이트
+        isSafeFieldUpdate(['emotionTracking']) ||
+        
+        // 4. 감정 분포와 추적 동시 업데이트
+        isSafeFieldUpdate(['emotionDistribution', 'emotionTracking']) ||
+        
+        // 5. 감정 분포와 기분 상태 동시 업데이트
+        isSafeFieldUpdate(['emotionDistribution', 'mood']) ||
+        
+        // 6. 감정 추적과 기분 상태 동시 업데이트
+        isSafeFieldUpdate(['emotionTracking', 'mood']) ||
+        
+        // 7. 감정 분포, 추적, 기분 상태 모두 업데이트
+        isSafeFieldUpdate(['emotionDistribution', 'emotionTracking', 'mood']) ||
+        
+        // 8. 기분 상태만 업데이트
+        isSafeFieldUpdate(['mood']) ||
+        
+        // 9. 감정 관련 필드들의 부분 업데이트 허용
+        request.resource.data.diff(resource.data).affectedKeys().hasAny(['emotionDistribution', 'emotionTracking', 'mood']) &&
+        request.resource.data.diff(resource.data).affectedKeys().size() <= 3
+      );
+      
       allow delete: if isOwner(userId);
     }
 
@@ -32,9 +92,20 @@ service cloud.firestore {
         && request.resource.data.content is string
         && request.resource.data.category is string;
       
-      // 수정은 작성자만 가능
-      allow update: if isAuthenticated() 
-        && resource.data.userUid == request.auth.uid;
+      // 수정 규칙을 더 세분화
+      allow update: if isAuthenticated() && (
+        // 작성자는 모든 필드 수정 가능 (노트 편집 기능)
+        (resource.data.userUid == request.auth.uid && (
+          // 일반 노트 수정 (제목, 내용, 카테고리, 이미지)
+          isSafeFieldUpdate(['title', 'content', 'category', 'image', 'updatedAt']) ||
+          // 노트 수정 시간만 업데이트
+          isSafeFieldUpdate(['updatedAt']) ||
+          // 노트 전체 수정 (편집 시)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'updatedAt'])
+        )) ||
+        // 다른 사용자는 상호작용 관련 필드만 수정 가능
+        isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment'])
+      );
       
       // 삭제는 작성자만 가능
       allow delete: if isAuthenticated() 
@@ -45,6 +116,94 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated() && request.auth.uid == userId;
       }
+    }
+
+    // 댓글 컬렉션 규칙 (필요시 추가)
+    match /comments/{commentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userUid == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userUid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userUid == request.auth.uid;
+    }
+
+    // 알림 컬렉션 규칙 (필요시 추가)
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.targetUserId == request.auth.uid;
+    }
+
+    // 공지사항 컬렉션 규칙
+    match /announcements/{announcementId} {
+      // 읽기는 모든 인증된 사용자에게 허용
+      allow read: if isAuthenticated();
+      
+      // 생성, 수정, 삭제는 관리자만 가능
+      allow create: if isAdmin() 
+        && request.resource.data.title is string
+        && request.resource.data.content is string
+        && request.resource.data.important is bool;
+      
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 업데이트 내역 컬렉션 규칙
+    match /updates/{updateId} {
+      // 읽기는 모든 인증된 사용자에게 허용
+      allow read: if isAuthenticated();
+      
+      // 생성, 수정, 삭제는 관리자만 가능
+      allow create: if isAdmin()
+        && request.resource.data.version is string
+        && request.resource.data.title is string
+        && request.resource.data.changes is list
+        && request.resource.data.type is string
+        && request.resource.data.releaseDate is timestamp;
+      
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 시스템 설정 관리
+    match /systemSettings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 보안 로그 컬렉션 규칙 (관리자만 접근 가능)
+    match /securityLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 차단된 IP 컬렉션 규칙 (관리자만 접근 가능)
+    match /blockedIPs/{blockId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 키워드 필터 컬렉션 규칙 (관리자만 접근 가능)
+    match /keywordFilters/{filterId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 신고 컬렉션 규칙
+    match /reports/{reportId} {
+      // 읽기: 관리자는 모든 신고 조회 가능, 일반 사용자는 자신의 신고만 조회 가능
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
+      
+      // 생성: 인증된 사용자는 신고 생성 가능
+      allow create: if isAuthenticated() 
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.contentType is string
+        && request.resource.data.contentId is string
+        && request.resource.data.reason is string
+        && request.resource.data.status == 'pending';
+      
+      // 수정: 관리자만 가능 (신고 처리)
+      allow update: if isAdmin();
+      
+      // 삭제: 관리자 또는 신고자 본인만 가능 (신고 취소)
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.reportedBy == request.auth.uid);
     }
   }
 }

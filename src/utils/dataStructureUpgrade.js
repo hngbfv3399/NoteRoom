@@ -8,6 +8,7 @@ import {
   serverTimestamp 
 } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { createEmotionDistribution, createEmotionTracking } from "./emotionConstants";
 
 // 댓글을 하위 컬렉션으로 이전
 export const migrateCommentsToSubcollection = async (noteId, comments) => {
@@ -140,6 +141,147 @@ export const migrateUserNameToDisplayName = async () => {
     throw error;
   }
 };
+
+// 안전한 감정 추적 데이터 마이그레이션 (재시도 로직 포함)
+export const safeEmotionTrackingMigration = async () => {
+  try {
+    console.log("안전한 감정 추적 데이터 마이그레이션 시작");
+    
+    const usersCollection = collection(db, "users");
+    const userSnapshot = await getDocs(usersCollection);
+    let migratedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    console.log(`총 ${userSnapshot.docs.length}명의 사용자 확인 중...`);
+    
+    for (const userDoc of userSnapshot.docs) {
+      const userData = userDoc.data();
+      
+      // 기본 필수 필드 확인
+      if (!userData || typeof userData !== 'object') {
+        console.error(`사용자 ${userDoc.id}: 잘못된 사용자 데이터`);
+        errorCount++;
+        errors.push({ 
+          userId: userDoc.id, 
+          email: 'unknown',
+          error: '잘못된 사용자 데이터 구조',
+          errorCode: 'invalid_data'
+        });
+        continue;
+      }
+      
+      try {
+        console.log(`사용자 ${userDoc.id} 처리 중... (이메일: ${userData.email || 'no email'})`);
+        
+        // 이미 감정 추적 데이터가 완전히 있는 경우 스킵
+        const hasCompleteEmotionData = userData.emotionTracking && 
+                                      userData.emotionDistribution &&
+                                      typeof userData.emotionTracking === 'object' &&
+                                      typeof userData.emotionDistribution === 'object';
+        
+        if (hasCompleteEmotionData) {
+          console.log(`사용자 ${userDoc.id}: 이미 완전한 감정 추적 데이터 있음`);
+          skippedCount++;
+          continue;
+        }
+        
+        const updateData = {};
+        
+        // emotionDistribution 검증 및 추가
+        if (!userData.emotionDistribution || typeof userData.emotionDistribution !== 'object') {
+          console.log(`사용자 ${userDoc.id}: emotionDistribution 추가/수정`);
+          updateData.emotionDistribution = createEmotionDistribution();
+        }
+        
+        // emotionTracking 검증 및 추가
+        if (!userData.emotionTracking || typeof userData.emotionTracking !== 'object') {
+          console.log(`사용자 ${userDoc.id}: emotionTracking 추가/수정`);
+          updateData.emotionTracking = createEmotionTracking();
+        }
+        
+        // 업데이트할 데이터가 있는 경우에만 실행
+        if (Object.keys(updateData).length > 0) {
+          console.log(`사용자 ${userDoc.id}: 업데이트 시작...`);
+          
+          // 재시도 로직 (최대 3번)
+          let retryCount = 0;
+          let success = false;
+          
+          while (retryCount < 3 && !success) {
+            try {
+              await updateDoc(doc(db, "users", userDoc.id), updateData);
+              console.log(`사용자 ${userDoc.id}: 감정 추적 데이터 추가 완료 (시도 ${retryCount + 1})`);
+              success = true;
+              migratedCount++;
+            } catch (retryError) {
+              retryCount++;
+              console.warn(`사용자 ${userDoc.id}: 업데이트 실패 (시도 ${retryCount}/3):`, retryError.message);
+              
+              if (retryCount < 3) {
+                // 1초 대기 후 재시도
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              } else {
+                throw retryError;
+              }
+            }
+          }
+        } else {
+          console.log(`사용자 ${userDoc.id}: 업데이트할 데이터 없음`);
+          skippedCount++;
+        }
+        
+      } catch (error) {
+        console.error(`사용자 ${userDoc.id} 처리 중 최종 오류:`, error);
+        errorCount++;
+        errors.push({ 
+          userId: userDoc.id, 
+          email: userData.email || 'no email',
+          error: error.message,
+          errorCode: error.code || 'unknown',
+          userData: {
+            hasEmotionTracking: !!userData.emotionTracking,
+            hasEmotionDistribution: !!userData.emotionDistribution,
+            emotionTrackingType: typeof userData.emotionTracking,
+            emotionDistributionType: typeof userData.emotionDistribution
+          }
+        });
+      }
+    }
+    
+    // 결과 리포트
+    console.log("\n=== 안전한 감정 추적 마이그레이션 결과 ===");
+    console.log(`총 사용자 수: ${userSnapshot.docs.length}`);
+    console.log(`성공적으로 마이그레이션된 사용자: ${migratedCount}`);
+    console.log(`이미 데이터가 있어 스킵된 사용자: ${skippedCount}`);
+    console.log(`오류 발생 사용자: ${errorCount}`);
+    
+    if (errors.length > 0) {
+      console.log("\n상세 오류 목록:");
+      errors.forEach(({ userId, email, error, errorCode, userData }) => {
+        console.log(`- 사용자 ${userId} (${email}):`);
+        console.log(`  오류: ${error} (코드: ${errorCode})`);
+        console.log(`  데이터 상태:`, userData);
+      });
+    }
+
+    return {
+      total: userSnapshot.docs.length,
+      migrated: migratedCount,
+      skipped: skippedCount,
+      errors: errorCount,
+      errorDetails: errors
+    };
+    
+  } catch (error) {
+    console.error("안전한 감정 추적 마이그레이션 중 치명적 오류 발생:", error);
+    throw error;
+  }
+};
+
+// 감정 추적 데이터 마이그레이션 (기존 함수와 동일)
+export const migrateEmotionTrackingData = safeEmotionTrackingMigration;
 
 // 전체 구조 개선 실행
 export const upgradeDataStructure = async () => {

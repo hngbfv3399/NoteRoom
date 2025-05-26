@@ -1,51 +1,34 @@
-import React, { memo, useCallback, useEffect, useRef } from 'react';
+/**
+ * 카테고리 필터링을 위한 배너 컴포넌트 (리팩토링됨)
+ * 
+ * 주요 기능:
+ * - 카테고리별 필터 버튼 제공
+ * - 반응형 버튼 크기 조정 (커스텀 훅 사용)
+ * - 가로 스크롤 지원 (모바일)
+ * - 선택된 카테고리 시각적 표시
+ * 
+ * NOTE: 반응형 로직을 커스텀 훅으로 분리하여 코드 간소화
+ * TODO: 카테고리 추가/삭제 시 애니메이션 효과 고려
+ */
+import React, { memo, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import ThemedButton from "@/components/ui/ThemedButton";
+import { useResponsiveButtonWidth } from "@/hooks/useResponsiveButtonWidth";
 
+// 카테고리 필터 UI 컴포넌트 (메모이제이션으로 성능 최적화)
 const CategoryBanner = memo(function CategoryBanner({ 
   category, 
   setFilterCategory, 
   filterCategory 
 }) {
-  const containerRef = useRef(null);
+  // 반응형 버튼 너비 조정 커스텀 훅
+  const containerRef = useResponsiveButtonWidth(category.length, 16);
   
+  // 카테고리 버튼 클릭 시 필터 상태 갱신
+  // NOTE: "전체" 선택 시 null로 설정하여 모든 카테고리 표시
   const handleClick = useCallback((item) => {
     setFilterCategory(item === "전체" ? null : item);
   }, [setFilterCategory]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const updateButtonWidths = () => {
-      const containerWidth = container.offsetWidth;
-      const buttons = container.querySelectorAll('button');
-      const buttonCount = buttons.length;
-      
-      // 모바일에서는 스크롤 가능하게, 데스크톱에서는 자동으로 너비 조절
-      if (window.innerWidth < 768) {
-        buttons.forEach(button => {
-          button.style.width = '120px';
-        });
-      } else {
-        // 버튼 사이의 간격 (gap)을 고려한 계산
-        const totalGap = (buttonCount - 1) * 16; // gap-4는 16px
-        const buttonWidth = (containerWidth - totalGap) / buttonCount;
-        
-        buttons.forEach(button => {
-          button.style.width = `${buttonWidth}px`;
-        });
-      }
-    };
-
-    // 초기 실행 및 리사이즈 이벤트에 대한 처리
-    updateButtonWidths();
-    window.addEventListener('resize', updateButtonWidths);
-
-    return () => {
-      window.removeEventListener('resize', updateButtonWidths);
-    };
-  }, [category.length]);
 
   return (
     <nav 
@@ -53,8 +36,10 @@ const CategoryBanner = memo(function CategoryBanner({
       className="w-full px-4 py-3"
       aria-label="카테고리 네비게이션"
     >
-      <div className="flex gap-4 md:gap-4 overflow-x-auto md:overflow-x-hidden hide-scrollbar">
+      {/* 가로 스크롤이 가능한 버튼 목록 */}
+      <div className="flex gap-4 md:gap-4 overflow-x-auto hide-scrollbar">
         {category.map((item) => {
+          // 현재 선택된 카테고리인지 확인
           const isSelected = (filterCategory === null && item === "전체") || filterCategory === item;
 
           return (
@@ -75,12 +60,14 @@ const CategoryBanner = memo(function CategoryBanner({
   );
 });
 
+// PropTypes 정의로 타입 안정성 확보
 CategoryBanner.propTypes = {
   category: PropTypes.arrayOf(PropTypes.string).isRequired,
   setFilterCategory: PropTypes.func.isRequired,
   filterCategory: PropTypes.string,
 };
 
+// 기본값 설정
 CategoryBanner.defaultProps = {
   filterCategory: null,
 };

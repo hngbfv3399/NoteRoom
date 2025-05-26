@@ -1,0 +1,161 @@
+/* ThreadPage 전용 스타일 */
+
+/* 스냅 스크롤 최적화 */
+.thread-container {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.thread-slide {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* 모바일 터치 최적화 */
+@media (max-width: 768px) {
+  .thread-container {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* 스크롤바 숨기기 (추가 보장) */
+.thread-container::-webkit-scrollbar {
+  display: none;
+}
+
+.thread-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 액션 버튼 애니메이션 */
+.thread-action-button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.thread-action-button:hover {
+  transform: scale(1.1);
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.thread-action-button:active {
+  transform: scale(0.95);
+}
+
+/* 프로필 이미지 애니메이션 */
+.thread-profile-image {
+  transition: transform 0.2s ease;
+}
+
+.thread-profile-image:hover {
+  transform: scale(1.05);
+}
+
+/* 텍스트 그림자 최적화 */
+.thread-text-shadow {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8),
+               0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* 백드롭 블러 최적화 */
+.thread-backdrop-blur {
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* 스와이프 힌트 애니메이션 */
+.thread-swipe-hint {
+  animation: swipeHint 2s ease-in-out infinite;
+}
+
+@keyframes swipeHint {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateX(5px);
+  }
+}
+
+/* 로딩 스켈레톤 애니메이션 개선 */
+.thread-skeleton-pulse {
+  animation: threadPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes threadPulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* 진행 표시기 스타일 */
+.thread-progress-indicator {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 플로팅 버튼 스타일 */
+.thread-floating-button {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background-color: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.thread-floating-button:hover {
+  background-color: rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* 키보드 힌트 스타일 */
+.thread-keyboard-hint {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 성능 최적화 */
+.thread-slide {
+  will-change: transform;
+  contain: layout style paint;
+}
+
+/* 접근성 개선 */
+.thread-container:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* 다크모드 최적화 */
+@media (prefers-color-scheme: dark) {
+  .thread-backdrop-blur {
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+  
+  .thread-floating-button {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* 고해상도 디스플레이 최적화 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .thread-text-shadow {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8),
+                 0 0.5px 1px rgba(0, 0, 0, 0.6);
+  }
+} 

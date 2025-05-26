@@ -29,7 +29,7 @@ function LayoutWrapper() {
       >
         {/* Header */}
         <div
-          className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl z-10"
+          className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl z-50"
           style={{ height: "64px" }}
         >
           <HeaderLayout />

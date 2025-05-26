@@ -15,10 +15,14 @@
 
 
 import React, { useState, useMemo } from "react";
+import { useSelector } from "react-redux";
 import { useNotesInfinite } from "@/hooks/useNotesInfinite";
 import { addCommentToNote } from "@/utils/firebaseNoteDataUtil";
 import ThemedButton from "@/components/ui/ThemedButton";
+import ReportButton from "@/components/common/ReportButton";
+import { REPORT_TYPES } from "@/constants/adminConstants";
 import dayjs from "dayjs";
+
 const formatDate = (timestamp) => {
   if (!timestamp) return "날짜 없음";
   
@@ -35,7 +39,11 @@ const formatDate = (timestamp) => {
   }
 };
 
-const CommentSection =({ noteId }) => {
+const CommentSection = ({ noteId }) => {
+  // 현재 테마 가져오기
+  const { current, themes } = useSelector((state) => state.theme);
+  const currentTheme = themes[current];
+
   const [input, setInput] = useState("");
 
   // useNotes 훅으로 전체 노트 데이터 불러오기
@@ -86,7 +94,7 @@ const CommentSection =({ noteId }) => {
   };
 
   if (isLoading) return (
-    <div className="p-4 text-center text-gray-600">
+    <div className={`p-4 text-center opacity-70 ${currentTheme?.textColor || 'text-gray-600'}`}>
       댓글을 불러오는 중입니다...
     </div>
   );
@@ -101,7 +109,7 @@ const CommentSection =({ noteId }) => {
     <div className={`mt-8`}>
       <form onSubmit={handleSubmit} className="mb-6">
         <textarea
-          className="w-full p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className={`w-full p-3 rounded-lg resize-none focus:outline-none focus:ring-2 transition-all duration-200 ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputText || 'text-gray-800'} ${currentTheme?.inputBorder || 'border border-gray-300'} ${currentTheme?.inputFocus || 'focus:ring-blue-500'}`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -119,7 +127,7 @@ const CommentSection =({ noteId }) => {
 
       <div className="space-y-4">
         {comments.length === 0 ? (
-          <p className="text-center text-gray-500">첫 번째 댓글을 작성해보세요!</p>
+          <p className={`text-center opacity-70 ${currentTheme?.textColor || 'text-gray-500'}`}>첫 번째 댓글을 작성해보세요!</p>
         ) : (
           comments
             .slice()
@@ -127,15 +135,30 @@ const CommentSection =({ noteId }) => {
             .map((comment, index) => (
               <div 
                 key={index}
-                className="p-4 bg-gray-50 rounded-lg"
+                className={`p-4 rounded-lg border ${currentTheme?.modalBgColor || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}
               >
-                <div className="flex justify-between items-center mb-2">
-                  <strong className="text-gray-700">{comment.userName || "익명"}</strong>
-                  <span className="text-sm text-gray-500">
-                    {formatDate(comment.createdAt)}
-                  </span>
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center mb-2">
+                      <strong className={`font-semibold ${currentTheme?.textColor || 'text-gray-700'}`}>{comment.userName || "익명"}</strong>
+                      <span className={`text-sm opacity-60 ${currentTheme?.textColor || 'text-gray-500'}`}>
+                        {formatDate(comment.createdAt)}
+                      </span>
+                    </div>
+                    <p className={`whitespace-pre-wrap ${currentTheme?.textColor || 'text-gray-800'}`}>{comment.content}</p>
+                  </div>
+                  
+                  {/* 신고 버튼 */}
+                  <div className="ml-2">
+                    <ReportButton
+                      contentType={REPORT_TYPES.COMMENT}
+                      contentId={`${noteId}_${index}`} // 댓글 고유 ID 생성
+                      contentTitle={`${comment.userName || "익명"}님의 댓글`}
+                      size="xs"
+                      variant="ghost"
+                    />
+                  </div>
                 </div>
-                <p className="text-gray-800 whitespace-pre-wrap">{comment.content}</p>
               </div>
             ))
         )}

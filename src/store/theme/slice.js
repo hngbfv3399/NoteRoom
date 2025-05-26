@@ -1,10 +1,12 @@
-// src/store/theme/slice.js
+
 
 import { createSlice } from "@reduxjs/toolkit";
 
+
 const initialState = {
-  current: "modern",
+  current: "modern",  
   themes: {
+
     modern: {
       bgColor: "bg-gray-50",
       modalBgColor: "bg-white",
@@ -19,6 +21,7 @@ const initialState = {
       inputBorder: "border border-gray-300",
       inputFocus: "focus:border-sky-500 focus:ring-sky-300",
     },
+
     retro: {
       bgColor: "bg-yellow-100",
       modalBgColor: "bg-yellow-50",
@@ -33,6 +36,7 @@ const initialState = {
       inputBorder: "border border-green-700",
       inputFocus: "focus:border-green-500 focus:ring-green-300",
     },
+
     dark: {
       bgColor: "bg-zinc-900",
       modalBgColor: "bg-zinc-800",
@@ -47,6 +51,7 @@ const initialState = {
       inputBorder: "border border-zinc-700",
       inputFocus: "focus:border-gray-400 focus:ring-gray-600",
     },
+
     dreamy: {
       bgColor: "bg-purple-100",
       modalBgColor: "bg-purple-50",
@@ -61,6 +66,7 @@ const initialState = {
       inputBorder: "border border-purple-300",
       inputFocus: "focus:border-pink-400 focus:ring-pink-300",
     },
+
     ocean: {
       bgColor: "bg-cyan-100",
       modalBgColor: "bg-cyan-50",
@@ -75,6 +81,7 @@ const initialState = {
       inputBorder: "border border-blue-300",
       inputFocus: "focus:border-blue-500 focus:ring-blue-300",
     },
+
     forest: {
       bgColor: "bg-green-100",
       modalBgColor: "bg-green-50",
@@ -93,17 +100,17 @@ const initialState = {
 };
 
 
-
-
 const themeSlice = createSlice({
   name: "theme",
   initialState,
   reducers: {
+
     setTheme: (state, action) => {
-      state.current = action.payload;
+      state.current = action.payload;      
     },
   },
 });
 
+  
 export const { setTheme } = themeSlice.actions;
 export default themeSlice.reducer;

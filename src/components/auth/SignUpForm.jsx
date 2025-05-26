@@ -62,6 +62,34 @@ function SignUpForm({ onSuccess }) {
         favorites: userData.favorites.trim(),
         favoriteQuote: userData.favoriteQuote.trim(),
         hobbies: userData.hobbies.trim(),
+        
+        // 감정 분포 데이터
+        emotionDistribution: {
+          joy: 0,        // 기쁨
+          sadness: 0,    // 슬픔
+          anger: 0,      // 화남
+          excited: 0,    // 신남
+          calm: 0,       // 평온
+          stressed: 0,   // 스트레스
+          grateful: 0,   // 감사
+          anxious: 0,    // 불안
+          confident: 0,  // 자신감
+          lonely: 0,     // 외로움
+          hopeful: 0,    // 희망적
+          tired: 0,      // 피곤함
+        },
+        
+        // 감정 추적 시스템
+        emotionTracking: {
+          dailyEmotions: [], // 일일 감정 기록 배열
+          monthlyStats: {}, // 월간 통계
+          settings: {
+            reminderTime: "21:00", // 기본 알림 시간
+            reminderEnabled: true,
+            lastReminder: null,
+            monthlyResetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().split('T')[0]
+          }
+        },
       });
 
       onSuccess();
