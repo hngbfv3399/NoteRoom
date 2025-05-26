@@ -50,4 +50,15 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  build: {
+    sourcemap: false, // 프로덕션에서 소스 맵 비활성화
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage']
+        }
+      }
+    }
+  }
 })

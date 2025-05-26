@@ -30,8 +30,16 @@ service firebase.storage {
       return request.resource.size <= 5 * 1024 * 1024;
     }
 
-    // 파일명 보안 검증
+    // 파일명 보안 검증 - 생성 시용
     function hasValidFileName() {
+      return !request.resource.name.matches('.*[<>:"/\\|?*].*') && // 특수문자 제한
+             !request.resource.name.matches('.*\\.\\..*') && // 경로 순회 방지
+             request.resource.name.size() <= 255 && // 파일명 길이 제한
+             request.resource.name.size() > 0; // 빈 파일명 방지
+    }
+
+    // 파일명 보안 검증 - 기존 파일용
+    function hasValidExistingFileName() {
       return !resource.name.matches('.*[<>:"/\\|?*].*') && // 특수문자 제한
              !resource.name.matches('.*\\.\\..*') && // 경로 순회 방지
              resource.name.size() <= 255 && // 파일명 길이 제한
@@ -68,12 +76,10 @@ service firebase.storage {
       // 읽기는 모든 사용자에게 허용 (공개 콘텐츠)
       allow read: if true;
       
-      // 쓰기는 파일 소유자만 가능하며, 강화된 검증 적용
+      // 쓰기는 파일 소유자만 가능하며, 기본 검증만 적용
       allow create: if isOwner(userId)
         && isValidImageType()
-        && isValidFileSize()
-        && hasValidFileName()
-        && hasValidMetadata();
+        && isValidFileSize();
       
       allow update, delete: if isOwner(userId);
     }
