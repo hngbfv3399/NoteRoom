@@ -7,6 +7,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { FiTool } from "react-icons/fi";
+
 import SearchInput from "./SearchInput";
 import NotificationBell from "./NotificationBell";
 import { maintenanceMode, isCurrentUserAdmin } from "@/utils/adminUtils";

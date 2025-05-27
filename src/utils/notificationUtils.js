@@ -1,6 +1,8 @@
 /**
  * 알림 시스템 유틸리티
  * 댓글, 대댓글, 멘션 알림을 관리합니다.
+ * 
+ * IMPROVED: Redux 토스트 시스템 통합, 에러 처리 강화, 재시도 로직 추가
  */
 
 import { 
@@ -23,6 +25,8 @@ import {
   showMentionNotification, 
   showNewNoteNotification 
 } from './pushNotificationUtils';
+import store from '@/store/store';
+import { showToast } from '@/store/toast/slice';
 
 // 알림 타입 정의
 export const NOTIFICATION_TYPES = {
@@ -32,14 +36,57 @@ export const NOTIFICATION_TYPES = {
   NEW_NOTE: 'new_note'
 };
 
-// 토스트 알림 표시 헬퍼 함수
+// 토스트 알림 표시 헬퍼 함수 (Redux 기반)
 const showToastNotification = (message, type = 'info') => {
-  if (typeof window !== 'undefined' && window.showToast) {
-    window.showToast(message, type, 4000); // 4초간 표시
+  try {
+    store.dispatch(showToast({
+      message,
+      type,
+      duration: 4000
+    }));
+  } catch (error) {
+    console.error('토스트 알림 표시 실패:', error);
+    // 폴백: 기존 window.showToast 사용
+    if (typeof window !== 'undefined' && window.showToast) {
+      window.showToast(message, type, 4000);
+    }
   }
 };
 
-// 댓글 알림 생성
+// 재시도 로직을 포함한 안전한 Firestore 작업
+const safeFirestoreOperation = async (operation, maxRetries = 3) => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      
+      // 네트워크 오류나 일시적 오류인 경우 재시도
+      if (
+        error.code === 'unavailable' || 
+        error.code === 'deadline-exceeded' ||
+        error.code === 'internal' ||
+        error.message.includes('network')
+      ) {
+        if (attempt < maxRetries) {
+          console.warn(`Firestore 작업 재시도 ${attempt}/${maxRetries}:`, error.message);
+          // 지수 백오프
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          continue;
+        }
+      }
+      
+      // 재시도하지 않을 오류이거나 최대 재시도 횟수 도달
+      throw error;
+    }
+  }
+  
+  throw lastError;
+};
+
+// 댓글 알림 생성 (개선된 에러 처리 및 재시도 로직)
 export const createCommentNotification = async (noteId, noteAuthorId, commentAuthorId, commentContent) => {
   try {
     // 자신의 글에 자신이 댓글을 단 경우 알림 생성하지 않음
@@ -47,26 +94,34 @@ export const createCommentNotification = async (noteId, noteAuthorId, commentAut
       return { success: true };
     }
 
-    // 댓글 작성자 정보 가져오기
-    const commentAuthorDoc = await getDoc(doc(db, 'users', commentAuthorId));
-    const commentAuthorData = commentAuthorDoc.data();
-    const commentAuthorName = commentAuthorData?.displayName || '익명';
+    // 안전한 Firestore 작업으로 사용자 정보 가져오기
+    const [commentAuthorData, noteData] = await Promise.all([
+      safeFirestoreOperation(async () => {
+        const doc = await getDoc(doc(db, 'users', commentAuthorId));
+        return doc.data();
+      }),
+      safeFirestoreOperation(async () => {
+        const doc = await getDoc(doc(db, 'notes', noteId));
+        return doc.data();
+      })
+    ]);
 
-    // 노트 정보 가져오기 (브라우저 알림용)
-    const noteDoc = await getDoc(doc(db, 'notes', noteId));
-    const noteData = noteDoc.data();
+    const commentAuthorName = commentAuthorData?.displayName || '익명';
     const noteTitle = noteData?.title || '제목 없음';
 
-    await addDoc(collection(db, 'notifications'), {
-      type: NOTIFICATION_TYPES.COMMENT,
-      targetUser: noteAuthorId,
-      fromUser: commentAuthorId,
-      contentId: noteId,
-      contentType: 'note',
-      message: `${commentAuthorName}님이 회원님의 글에 댓글을 달았습니다.`,
-      preview: commentContent.substring(0, 50) + (commentContent.length > 50 ? '...' : ''),
-      isRead: false,
-      createdAt: serverTimestamp()
+    // 알림 생성
+    await safeFirestoreOperation(async () => {
+      return await addDoc(collection(db, 'notifications'), {
+        type: NOTIFICATION_TYPES.COMMENT,
+        targetUser: noteAuthorId,
+        fromUser: commentAuthorId,
+        contentId: noteId,
+        contentType: 'note',
+        message: `${commentAuthorName}님이 회원님의 글에 댓글을 달았습니다.`,
+        preview: commentContent.substring(0, 50) + (commentContent.length > 50 ? '...' : ''),
+        isRead: false,
+        createdAt: serverTimestamp()
+      });
     });
 
     // 브라우저 푸시 알림 표시
@@ -82,7 +137,14 @@ export const createCommentNotification = async (noteId, noteAuthorId, commentAut
     return { success: true };
   } catch (error) {
     console.error('댓글 알림 생성 실패:', error);
-    showToastNotification('댓글 알림 생성에 실패했습니다.', 'error');
+    
+    const errorMessage = error.code === 'permission-denied'
+      ? '댓글 알림 권한이 없습니다.'
+      : error.code === 'unavailable'
+      ? '네트워크 연결을 확인해주세요.'
+      : '댓글 알림 생성에 실패했습니다.';
+    
+    showToastNotification(errorMessage, 'error');
     throw error;
   }
 };

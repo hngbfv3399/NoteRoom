@@ -286,4 +286,343 @@ export default {
   debugTheme,
   DEFAULT_THEME,
 };
+
+/**
+ * 테마 클래스를 조합하여 반환하는 헬퍼 함수들
+ */
+
+// 기본 배경 및 텍스트 조합
+export const getPageTheme = (theme) => {
+  return `${theme.bgColor} ${theme.textColor} ${theme.fontStyle}`;
+};
+
+// 카드/모달 테마 조합
+export const getCardTheme = (theme) => {
+  return `${theme.cardBg} ${theme.textColor} ${theme.borderColor} ${theme.shadowColor}`;
+};
+
+// 모달 테마 조합
+export const getModalTheme = (theme) => {
+  return `${theme.modalBgColor} ${theme.textColor} ${theme.borderColor} ${theme.shadowColor}`;
+};
+
+// 버튼 테마 조합
+export const getButtonTheme = (theme, variant = 'primary') => {
+  const baseClasses = `${theme.buttonBg} ${theme.buttonText} ${theme.buttonHover}`;
+  
+  switch (variant) {
+    case 'secondary':
+      return `${theme.cardBg} ${theme.textColor} ${theme.borderColor} hover:${theme.hoverBg}`;
+    case 'success':
+      return `bg-green-600 text-white hover:bg-green-700`;
+    case 'error':
+      return `bg-red-600 text-white hover:bg-red-700`;
+    case 'warning':
+      return `bg-yellow-600 text-white hover:bg-yellow-700`;
+    case 'info':
+      return `bg-blue-600 text-white hover:bg-blue-700`;
+    default:
+      return baseClasses;
+  }
+};
+
+// 입력 필드 테마 조합
+export const getInputTheme = (theme) => {
+  return `${theme.inputBg} ${theme.inputText} ${theme.inputBorder} ${theme.inputFocus}`;
+};
+
+// 링크 테마
+export const getLinkTheme = (theme) => {
+  return `${theme.linkColor} hover:underline`;
+};
+
+// 상태별 텍스트 색상
+export const getStatusTextTheme = (theme, status) => {
+  switch (status) {
+    case 'success':
+      return theme.successColor || 'text-green-600';
+    case 'error':
+      return theme.errorColor || 'text-red-600';
+    case 'warning':
+      return theme.warningColor || 'text-yellow-600';
+    case 'info':
+      return theme.infoColor || 'text-blue-600';
+    default:
+      return theme.textColor;
+  }
+};
+
+// 상태별 배경 색상
+export const getStatusBgTheme = (theme, status) => {
+  switch (status) {
+    case 'success':
+      return theme.successBg || 'bg-green-50';
+    case 'error':
+      return theme.errorBg || 'bg-red-50';
+    case 'warning':
+      return theme.warningBg || 'bg-yellow-50';
+    case 'info':
+      return theme.infoBg || 'bg-blue-50';
+    default:
+      return theme.cardBg;
+  }
+};
+
+// 그라데이션 테마
+export const getGradientTheme = (theme, type = 'bg') => {
+  switch (type) {
+    case 'text':
+      return theme.gradientText || 'bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent';
+    case 'bg':
+    default:
+      return theme.gradientBg || 'bg-gradient-to-r from-blue-50 to-indigo-50';
+  }
+};
+
+// 구분선 테마
+export const getDividerTheme = (theme) => {
+  return theme.dividerColor || theme.borderColor || 'border-gray-200';
+};
+
+// 호버 효과 테마
+export const getHoverTheme = (theme) => {
+  return theme.hoverBg || 'hover:bg-gray-100';
+};
+
+// 복합 테마 조합 (자주 사용되는 조합들)
+export const getContainerTheme = (theme) => {
+  return `${getPageTheme(theme)} min-h-screen transition-colors duration-200`;
+};
+
+export const getContentCardTheme = (theme) => {
+  return `${getCardTheme(theme)} rounded-lg p-6 transition-all duration-200`;
+};
+
+export const getHeaderTheme = (theme) => {
+  return `${theme.cardBg} ${theme.textColor} ${theme.borderColor} shadow-sm`;
+};
+
+export const getNavigationTheme = (theme) => {
+  return `${theme.cardBg} ${theme.textColor} ${theme.borderColor}`;
+};
+
+// 반응형 테마 적용
+export const getResponsiveTheme = (theme, breakpoint = 'base') => {
+  const baseTheme = getPageTheme(theme);
+  
+  switch (breakpoint) {
+    case 'mobile':
+      return `${baseTheme} px-4 py-2`;
+    case 'tablet':
+      return `${baseTheme} px-6 py-4`;
+    case 'desktop':
+      return `${baseTheme} px-8 py-6`;
+    default:
+      return baseTheme;
+  }
+};
+
+// 애니메이션과 함께 테마 적용
+export const getAnimatedTheme = (theme, animation = 'fade') => {
+  const baseTheme = getPageTheme(theme);
+  
+  switch (animation) {
+    case 'slide':
+      return `${baseTheme} transform transition-all duration-300 ease-in-out`;
+    case 'scale':
+      return `${baseTheme} transform transition-transform duration-200 hover:scale-105`;
+    case 'fade':
+    default:
+      return `${baseTheme} transition-opacity duration-300`;
+  }
+};
+
+// 테마별 아이콘 색상
+export const getIconTheme = (theme, variant = 'default') => {
+  switch (variant) {
+    case 'primary':
+      return theme.linkColor || 'text-blue-600';
+    case 'secondary':
+      return theme.textSecondary || 'text-gray-500';
+    case 'success':
+      return theme.successColor || 'text-green-600';
+    case 'error':
+      return theme.errorColor || 'text-red-600';
+    case 'warning':
+      return theme.warningColor || 'text-yellow-600';
+    case 'info':
+      return theme.infoColor || 'text-blue-600';
+    default:
+      return theme.textColor || 'text-gray-800';
+  }
+};
+
+// 테마 전환 애니메이션
+export const getThemeTransition = () => {
+  return 'transition-all duration-300 ease-in-out';
+};
+
+// 다크모드 감지 및 자동 테마 적용
+export const getAutoTheme = (themes, prefersDark = false) => {
+  if (prefersDark && themes.dark) {
+    return themes.dark;
+  }
+  return themes.modern || Object.values(themes)[0];
+};
+
+// 접근성을 고려한 테마 적용
+export const getAccessibleTheme = (theme, highContrast = false) => {
+  if (highContrast) {
+    return {
+      ...theme,
+      textColor: 'text-black',
+      bgColor: 'bg-white',
+      borderColor: 'border-black',
+    };
+  }
+  return theme;
+};
+
+// 비활성화 상태 테마
+export const getDisabledTheme = (theme) => {
+  return `${theme.disabledBg || 'bg-gray-100'} ${theme.disabledText || 'text-gray-400'} ${theme.disabledBorder || 'border-gray-200'} cursor-not-allowed`;
+};
+
+// 선택 영역 테마
+export const getSelectionTheme = (theme) => {
+  return `${theme.selectionBg || 'selection:bg-blue-200'} ${theme.selectionText || 'selection:text-blue-900'}`;
+};
+
+// 포커스 링 테마
+export const getFocusRingTheme = (theme) => {
+  return theme.focusRing || 'focus:ring-2 focus:ring-blue-500 focus:ring-offset-2';
+};
+
+// 스크롤바 테마
+export const getScrollbarTheme = (theme) => {
+  return `${theme.scrollbarTrack || 'scrollbar-track-gray-100'} ${theme.scrollbarThumb || 'scrollbar-thumb-gray-300'} ${theme.scrollbarThumbHover || 'scrollbar-thumb-gray-400'}`;
+};
+
+// 스켈레톤/로딩 테마
+export const getSkeletonTheme = (theme) => {
+  return {
+    background: theme.skeletonBg || 'bg-gray-200',
+    shimmer: theme.skeletonShimmer || 'bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200'
+  };
+};
+
+// 오버레이 테마
+export const getOverlayTheme = (theme) => {
+  return `${theme.overlayBg || 'bg-black/50'} ${theme.backdropBlur || 'backdrop-blur-sm'}`;
+};
+
+// 활성 상태 테마
+export const getActiveTheme = (theme) => {
+  return `${theme.activeBg || 'bg-blue-100'} ${theme.activeText || 'text-blue-700'} ${theme.activeBorder || 'border-blue-300'}`;
+};
+
+// 복합 입력 필드 테마 (포커스 링 포함)
+export const getEnhancedInputTheme = (theme) => {
+  return `${getInputTheme(theme)} ${getFocusRingTheme(theme)} ${getSelectionTheme(theme)}`;
+};
+
+// 복합 버튼 테마 (포커스 링 포함)
+export const getEnhancedButtonTheme = (theme, variant = 'primary') => {
+  return `${getButtonTheme(theme, variant)} ${getFocusRingTheme(theme)} transition-all duration-200`;
+};
+
+// 인터랙티브 카드 테마
+export const getInteractiveCardTheme = (theme) => {
+  return `${getCardTheme(theme)} ${getHoverTheme(theme)} cursor-pointer transition-all duration-200 hover:scale-[1.02]`;
+};
+
+// 모달 컨테이너 테마 (오버레이 포함)
+export const getModalContainerTheme = (theme) => {
+  return {
+    overlay: getOverlayTheme(theme),
+    modal: `${getModalTheme(theme)} transform transition-all duration-300`
+  };
+};
+
+// 네비게이션 아이템 테마
+export const getNavItemTheme = (theme, isActive = false) => {
+  const baseTheme = `${theme.textColor} ${getHoverTheme(theme)} transition-colors duration-200`;
+  
+  if (isActive) {
+    return `${baseTheme} ${getActiveTheme(theme)}`;
+  }
+  
+  return baseTheme;
+};
+
+// 폼 그룹 테마
+export const getFormGroupTheme = (theme) => {
+  return `space-y-2 ${theme.textColor}`;
+};
+
+// 라벨 테마
+export const getLabelTheme = (theme) => {
+  return `block text-sm font-medium ${theme.textPrimary || theme.textColor}`;
+};
+
+// 에러 메시지 테마
+export const getErrorMessageTheme = (theme) => {
+  return `text-sm ${getStatusTextTheme(theme, 'error')} mt-1`;
+};
+
+// 성공 메시지 테마
+export const getSuccessMessageTheme = (theme) => {
+  return `text-sm ${getStatusTextTheme(theme, 'success')} mt-1`;
+};
+
+// 배지/태그 테마
+export const getBadgeTheme = (theme, variant = 'default') => {
+  const baseClasses = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium';
+  
+  switch (variant) {
+    case 'success':
+      return `${baseClasses} ${getStatusBgTheme(theme, 'success')} ${getStatusTextTheme(theme, 'success')}`;
+    case 'error':
+      return `${baseClasses} ${getStatusBgTheme(theme, 'error')} ${getStatusTextTheme(theme, 'error')}`;
+    case 'warning':
+      return `${baseClasses} ${getStatusBgTheme(theme, 'warning')} ${getStatusTextTheme(theme, 'warning')}`;
+    case 'info':
+      return `${baseClasses} ${getStatusBgTheme(theme, 'info')} ${getStatusTextTheme(theme, 'info')}`;
+    default:
+      return `${baseClasses} ${theme.cardBg} ${theme.textSecondary} ${theme.borderColor}`;
+  }
+};
+
+// 프로그레스 바 테마
+export const getProgressTheme = (theme) => {
+  return {
+    container: `w-full ${theme.cardBg} rounded-full h-2`,
+    bar: `h-2 ${theme.buttonBg} rounded-full transition-all duration-300`
+  };
+};
+
+// 툴팁 테마
+export const getTooltipTheme = (theme) => {
+  return `${theme.modalBgColor || theme.cardBg} ${theme.textColor} ${theme.shadowColor} px-2 py-1 text-sm rounded border ${theme.borderColor}`;
+};
+
+// 드롭다운 테마
+export const getDropdownTheme = (theme) => {
+  return `${theme.modalBgColor || theme.cardBg} ${theme.textColor} ${theme.shadowColor} border ${theme.borderColor} rounded-md py-1`;
+};
+
+// 체크박스/라디오 테마
+export const getCheckboxTheme = (theme) => {
+  return `${theme.buttonBg} border-2 ${theme.borderColor} ${getFocusRingTheme(theme)}`;
+};
+
+// 테이블 테마
+export const getTableTheme = (theme) => {
+  return {
+    table: `${theme.cardBg} ${theme.textColor} border ${theme.borderColor}`,
+    header: `${theme.buttonBg} ${theme.buttonText} font-medium`,
+    row: `border-b ${theme.dividerColor} ${getHoverTheme(theme)}`,
+    cell: 'px-4 py-2'
+  };
+};
   

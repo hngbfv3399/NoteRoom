@@ -8,45 +8,55 @@
  * - 로그아웃 기능
  * 
  * NOTE: 관리자 권한은 하드코딩된 이메일 목록으로 관리
- * TODO: 권한 관리 시스템 개선, 설정 항목 추가 (알림, 개인정보)
- * FIXME: 모달 컴포넌트 분리 필요, 에러 처리 개선
+ * IMPROVED: 모달 컴포넌트 분리로 재사용성 향상, 에러 처리 개선, 토스트 알림 추가
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { auth, db } from '@/services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import ModalOne from '@/features/MainHome/ModalOne';
+import AlertModal from '@/components/common/AlertModal';
 import ThemeSelector from '@/features/SettingPage/ThemeSelector';
 import ProfileActions from '@/features/SettingPage/ProfileActions';
 import ThemedButton from '@/components/ui/ThemedButton';
 import EmotionMigrationTool from '@/components/EmotionMigrationTool';
 import NotificationSettings from '@/components/NotificationSettings';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import { migrateUserNameToDisplayName } from '@/utils/dataStructureUpgrade';
-import { getModalThemeClass } from '@/utils/themeHelper';
 import { isCurrentUserAdmin } from '@/utils/adminUtils';
-import { useSelector } from 'react-redux';
+import { showToast } from '@/store/toast/slice';
 import { ADMIN_ROUTES, ROUTES } from '@/constants/routes';
 
 function SettingPage() {
-  // 테마 상태
-  const { current, themes } = useSelector((state) => state.theme);
-  const modalBgClass = themes[current] ? getModalThemeClass(themes[current]) : "bg-white";
-  
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   
   // 컴포넌트 상태
   const [showModal, setShowModal] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
+  const [modalConfig, setModalConfig] = useState({
+    type: 'info',
+    title: '알림',
+    message: '',
+    showCancel: false,
+    onConfirm: null
+  });
   const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [isMigrating, setIsMigrating] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // 사용자 데이터 로딩
+  // 사용자 데이터 로딩 (개선된 에러 처리)
   useEffect(() => {
     const fetchUserData = async () => {
+      setLoading(true);
       const user = auth.currentUser;
+      
       if (!user) {
+        dispatch(showToast({
+          type: 'error',
+          message: '로그인이 필요합니다.'
+        }));
         navigate('/');
         return;
       }
@@ -55,6 +65,13 @@ function SettingPage() {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
           setUserData({ uid: user.uid, ...userDoc.data() });
+        } else {
+          // 사용자 문서가 없는 경우 기본 정보만 설정
+          setUserData({ 
+            uid: user.uid, 
+            email: user.email,
+            displayName: user.displayName || '설정되지 않음'
+          });
         }
 
         // 관리자 권한 확인
@@ -62,51 +79,123 @@ function SettingPage() {
         setIsAdmin(adminStatus);
       } catch (error) {
         console.error('유저 데이터 로딩 실패:', error);
-        setModalMessage('유저 정보를 불러오는 중 오류가 발생했습니다.');
+        
+        const errorMessage = error.code === 'permission-denied'
+          ? '사용자 정보에 접근할 권한이 없습니다.'
+          : error.code === 'unavailable'
+          ? '네트워크 연결을 확인해주세요.'
+          : '사용자 정보를 불러오는 중 오류가 발생했습니다.';
+        
+        setModalConfig({
+          type: 'error',
+          title: '오류',
+          message: errorMessage,
+          showCancel: false,
+          onConfirm: () => {
+            setShowModal(false);
+            navigate('/');
+          }
+        });
         setShowModal(true);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchUserData();
-  }, [navigate]);
+  }, [navigate, dispatch]);
 
-  // 로그아웃 핸들러
+  // 로그아웃 핸들러 (개선된 에러 처리)
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      navigate('/');
-    } catch (error) {
-      console.error('로그아웃 실패:', error);
-      setModalMessage('로그아웃 중 오류가 발생했습니다.');
-      setShowModal(true);
-    }
+    setModalConfig({
+      type: 'warning',
+      title: '로그아웃',
+      message: '정말로 로그아웃하시겠습니까?',
+      showCancel: true,
+      onConfirm: async () => {
+        try {
+          await signOut(auth);
+          dispatch(showToast({
+            type: 'success',
+            message: '성공적으로 로그아웃되었습니다.'
+          }));
+          navigate('/');
+        } catch (error) {
+          console.error('로그아웃 실패:', error);
+          dispatch(showToast({
+            type: 'error',
+            message: '로그아웃 중 오류가 발생했습니다.'
+          }));
+        }
+        setShowModal(false);
+      }
+    });
+    setShowModal(true);
   };
 
-  // 데이터 마이그레이션 핸들러 (관리자 전용)
-  // NOTE: userName 필드를 displayName으로 변경하는 마이그레이션
+  // 데이터 마이그레이션 핸들러 (관리자 전용, 개선된 확인 및 에러 처리)
   const handleMigration = async () => {
-    if (!window.confirm('정말로 마이그레이션을 실행하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-      return;
-    }
-
-    setIsMigrating(true);
-    try {
-      const result = await migrateUserNameToDisplayName();
-      setModalMessage(`마이그레이션 완료!\n총: ${result.total}명\n성공: ${result.migrated}명\n실패: ${result.errors}명`);
-      setShowModal(true);
-    } catch (error) {
-      console.error('마이그레이션 실패:', error);
-      setModalMessage('마이그레이션 중 오류가 발생했습니다.');
-      setShowModal(true);
-    } finally {
-      setIsMigrating(false);
-    }
+    setModalConfig({
+      type: 'warning',
+      title: '데이터 마이그레이션',
+      message: '정말로 마이그레이션을 실행하시겠습니까?\n이 작업은 되돌릴 수 없으며 시스템 전체에 영향을 미칩니다.',
+      showCancel: true,
+      onConfirm: async () => {
+        setIsMigrating(true);
+        setShowModal(false);
+        
+        try {
+          const result = await migrateUserNameToDisplayName();
+          
+          setModalConfig({
+            type: 'success',
+            title: '마이그레이션 완료',
+            message: `마이그레이션이 성공적으로 완료되었습니다!\n\n총 사용자: ${result.total}명\n성공: ${result.migrated}명\n실패: ${result.errors}명`,
+            showCancel: false,
+            onConfirm: () => setShowModal(false)
+          });
+          setShowModal(true);
+          
+          dispatch(showToast({
+            type: 'success',
+            message: `마이그레이션 완료: ${result.migrated}/${result.total}명 성공`
+          }));
+        } catch (error) {
+          console.error('마이그레이션 실패:', error);
+          
+          const errorMessage = error.code === 'permission-denied'
+            ? '마이그레이션 권한이 없습니다.'
+            : '마이그레이션 중 오류가 발생했습니다.';
+          
+          setModalConfig({
+            type: 'error',
+            title: '마이그레이션 실패',
+            message: errorMessage,
+            showCancel: false,
+            onConfirm: () => setShowModal(false)
+          });
+          setShowModal(true);
+          
+          dispatch(showToast({
+            type: 'error',
+            message: errorMessage
+          }));
+        } finally {
+          setIsMigrating(false);
+        }
+      }
+    });
+    setShowModal(true);
   };
 
-  // 로딩 상태
-  // TODO: 스켈레톤 로딩으로 개선
-  if (!userData) {
-    return <div className="flex items-center justify-center min-h-screen">로딩 중...</div>;
+  // 로딩 상태 (개선된 UI)
+  if (loading || !userData) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <LoadingSpinner />
+        <p className="mt-4 text-gray-600">설정을 불러오는 중...</p>
+      </div>
+    );
   }
 
   return (
@@ -222,20 +311,17 @@ function SettingPage() {
         </section>
       </div>
 
-      {/* 알림 모달 */}
-      {/* FIXME: 모달 컴포넌트를 별도 파일로 분리하고 재사용성 향상 */}
-      <ModalOne isOpen={showModal} onClose={() => setShowModal(false)}>
-        <div className={`p-6 rounded-lg ${modalBgClass}`}>
-          <h3 className="text-lg font-semibold mb-4">알림</h3>
-          <p className="whitespace-pre-line">{modalMessage}</p>
-          <ThemedButton
-            onClick={() => setShowModal(false)}
-            className="mt-4"
-          >
-            확인
-          </ThemedButton>
-        </div>
-      </ModalOne>
+      {/* 개선된 알림 모달 */}
+      <AlertModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        showCancel={modalConfig.showCancel}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={() => setShowModal(false)}
+      />
     </div>
   );
 }

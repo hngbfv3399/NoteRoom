@@ -8,44 +8,35 @@
  * - 클릭으로 수동 닫기
  * - 테마 시스템 적용
  * 
- * NOTE: 전역 상태로 관리되어 앱 전체에서 사용
+ * NOTE: Redux로 전역 상태 관리
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
+import { removeToast } from '@/store/toast/slice';
 
 function ToastNotification() {
-  const [toasts, setToasts] = useState([]);
+  const dispatch = useDispatch();
+  const toasts = useSelector(state => state.toast.toasts);
 
-  // 토스트 제거 함수
-  const removeToast = (id) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
-
-  // 토스트 추가 함수 (전역에서 호출 가능하도록)
+  // 자동 제거 타이머 설정
   useEffect(() => {
-    // 전역 함수로 등록
-    window.showToast = (message, type = 'info', duration = 5000) => {
-      const id = Date.now() + Math.random();
-      const newToast = {
-        id,
-        message,
-        type, // 'success', 'error', 'warning', 'info'
-        duration
-      };
-
-      setToasts(prev => [...prev, newToast]);
-
-      // 자동 제거
-      setTimeout(() => {
-        removeToast(id);
-      }, duration);
-    };
+    const timers = toasts.map(toast => {
+      return setTimeout(() => {
+        dispatch(removeToast(toast.id));
+      }, toast.duration);
+    });
 
     return () => {
-      delete window.showToast;
+      timers.forEach(timer => clearTimeout(timer));
     };
-  }, []);
+  }, [toasts, dispatch]);
+
+  // 토스트 제거 함수
+  const handleRemoveToast = (id) => {
+    dispatch(removeToast(id));
+  };
 
   // 토스트 타입별 스타일
   const getToastStyle = (type) => {
@@ -106,7 +97,7 @@ function ToastNotification() {
             exit={{ opacity: 0, x: 300, scale: 0.8 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className={getToastStyle(toast.type)}
-            onClick={() => removeToast(toast.id)}
+            onClick={() => handleRemoveToast(toast.id)}
             style={{ cursor: 'pointer' }}
           >
             {/* 아이콘 */}
@@ -123,7 +114,7 @@ function ToastNotification() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                removeToast(toast.id);
+                handleRemoveToast(toast.id);
               }}
               className="flex-shrink-0 ml-3 text-gray-400 hover:text-gray-600 transition-colors"
             >

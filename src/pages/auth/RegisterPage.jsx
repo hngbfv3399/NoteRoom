@@ -8,19 +8,21 @@
  * - 기존 가입자 체크 및 리다이렉트
  * 
  * NOTE: Firebase Auth 인증 후 사용자 정보 완성 단계
- * TODO: 유효성 검사 강화, 중복 닉네임 체크
- * FIXME: 에러 처리 개선, 로딩 상태 추가
+ * IMPROVED: 유효성 검사 강화, 중복 닉네임 체크, 에러 처리 개선, 로딩 상태 추가
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { auth, db } from '@/services/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { uploadProfileImageToFirebase } from '@/utils/firebaseNoteDataUtil';
 import { getThemeClass } from '@/utils/themeHelper';
+import { showToast } from '@/store/toast/slice';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 function RegisterPage() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   
   // 테마 상태
   const { current, themes } = useSelector((state) => state.theme);
@@ -41,6 +43,13 @@ function RegisterPage() {
   // UI 상태
   const [isLoading, setIsLoading] = useState(false);
   const [imageUploadLoading, setImageUploadLoading] = useState(false);
+  const [nicknameChecking, setNicknameChecking] = useState(false);
+  const [nicknameAvailable, setNicknameAvailable] = useState(null);
+  
+  // 에러 상태
+  const [errors, setErrors] = useState({});
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRY_COUNT = 3;
 
   // 기본 아바타 옵션들 - 저작권 걱정 없는 이미지들
   const defaultAvatars = [
@@ -51,6 +60,81 @@ function RegisterPage() {
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex&backgroundColor=ffb3ba',
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Jordan&backgroundColor=bae1ff',
   ];
+
+  // 닉네임 중복 체크 함수
+  const checkNicknameAvailability = useCallback(async (nickname) => {
+    if (!nickname.trim()) {
+      setNicknameAvailable(null);
+      return;
+    }
+
+    setNicknameChecking(true);
+    try {
+      const q = query(
+        collection(db, 'users'),
+        where('displayName', '==', nickname.trim())
+      );
+      const querySnapshot = await getDocs(q);
+      const isAvailable = querySnapshot.empty;
+      
+      setNicknameAvailable(isAvailable);
+      
+      if (!isAvailable) {
+        setErrors(prev => ({
+          ...prev,
+          displayName: '이미 사용 중인 닉네임입니다.'
+        }));
+      } else {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.displayName;
+          return newErrors;
+        });
+      }
+    } catch (error) {
+      console.error('닉네임 중복 체크 실패:', error);
+      dispatch(showToast({
+        type: 'error',
+        message: '닉네임 중복 체크 중 오류가 발생했습니다.'
+      }));
+    } finally {
+      setNicknameChecking(false);
+    }
+  }, [dispatch]);
+
+  // 입력 유효성 검사 함수
+  const validateForm = useCallback(() => {
+    const newErrors = {};
+
+    // 닉네임 검사
+    if (!userData.displayName.trim()) {
+      newErrors.displayName = '닉네임을 입력해주세요.';
+    } else if (userData.displayName.trim().length < 2) {
+      newErrors.displayName = '닉네임은 2자 이상이어야 합니다.';
+    } else if (userData.displayName.trim().length > 20) {
+      newErrors.displayName = '닉네임은 20자 이하여야 합니다.';
+    } else if (!/^[가-힣a-zA-Z0-9_]+$/.test(userData.displayName.trim())) {
+      newErrors.displayName = '닉네임은 한글, 영문, 숫자, 언더스코어만 사용 가능합니다.';
+    }
+
+    // 생년월일 검사
+    if (!userData.birthDate) {
+      newErrors.birthDate = '생년월일을 입력해주세요.';
+    } else {
+      const birthDate = new Date(userData.birthDate);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      
+      if (age < 13) {
+        newErrors.birthDate = '13세 이상만 가입 가능합니다.';
+      } else if (age > 120) {
+        newErrors.birthDate = '올바른 생년월일을 입력해주세요.';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [userData]);
 
   // 사용자 인증 상태 및 기존 가입 여부 확인
   useEffect(() => {
@@ -89,13 +173,23 @@ function RegisterPage() {
     checkUserAndSetData();
   }, [navigate]);
 
-  // 입력 필드 변경 핸들러
+  // 입력 필드 변경 핸들러 (개선된 유효성 검사 포함)
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setUserData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // 실시간 유효성 검사
+    if (name === 'displayName') {
+      // 닉네임 중복 체크 (디바운싱)
+      const timeoutId = setTimeout(() => {
+        checkNicknameAvailability(value);
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
+    }
   };
 
   // 프로필 이미지 파일 선택 핸들러
@@ -104,13 +198,19 @@ function RegisterPage() {
     if (file) {
       // 파일 크기 체크 (5MB 제한)
       if (file.size > 5 * 1024 * 1024) {
-        alert('파일 크기는 5MB 이하여야 합니다.');
+        dispatch(showToast({
+          type: 'error',
+          message: '파일 크기는 5MB 이하여야 합니다.'
+        }));
         return;
       }
 
       // 이미지 파일 타입 체크
       if (!file.type.startsWith('image/')) {
-        alert('이미지 파일만 업로드 가능합니다.');
+        dispatch(showToast({
+          type: 'error',
+          message: '이미지 파일만 업로드 가능합니다.'
+        }));
         return;
       }
 
@@ -133,17 +233,25 @@ function RegisterPage() {
     setProfileImagePreview(avatarUrl);
   };
 
-  // 폼 제출 핸들러
+  // 폼 제출 핸들러 (개선된 에러 처리 및 토스트 알림)
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     // 유효성 검사
-    if (!userData.displayName.trim()) {
-      alert('닉네임을 입력해주세요.');
+    if (!validateForm()) {
+      dispatch(showToast({
+        type: 'error',
+        message: '입력 정보를 확인해주세요.'
+      }));
       return;
     }
-    if (!userData.birthDate) {
-      alert('생년월일을 입력해주세요.');
+
+    // 닉네임 중복 체크 확인
+    if (nicknameAvailable === false) {
+      dispatch(showToast({
+        type: 'error',
+        message: '사용할 수 없는 닉네임입니다.'
+      }));
       return;
     }
 
@@ -167,7 +275,10 @@ function RegisterPage() {
           finalProfileImageUrl = await uploadProfileImageToFirebase(profileImage, user.uid);
         } catch (error) {
           console.error('이미지 업로드 실패:', error);
-          alert('이미지 업로드 중 오류가 발생했습니다.');
+          dispatch(showToast({
+            type: 'error',
+            message: '이미지 업로드 중 오류가 발생했습니다.'
+          }));
           return;
         } finally {
           setImageUploadLoading(false);
@@ -226,10 +337,38 @@ function RegisterPage() {
       });
 
       // 회원가입 완료 후 메인 페이지로 이동
+      dispatch(showToast({
+        type: 'success',
+        message: '회원가입이 완료되었습니다! 환영합니다!'
+      }));
       navigate('/');
     } catch (error) {
       console.error('회원가입 실패:', error);
-      alert('회원가입 중 오류가 발생했습니다. 다시 시도해주세요.');
+      
+      // 재시도 로직
+      if (retryCount < MAX_RETRY_COUNT) {
+        setRetryCount(prev => prev + 1);
+        dispatch(showToast({
+          type: 'warning',
+          message: `회원가입 중 오류가 발생했습니다. 재시도 중... (${retryCount + 1}/${MAX_RETRY_COUNT})`
+        }));
+        
+        // 잠시 후 재시도
+        setTimeout(() => {
+          handleSubmit(e);
+        }, 2000);
+      } else {
+        const errorMessage = error.code === 'permission-denied'
+          ? '권한이 없습니다. 다시 로그인해주세요.'
+          : error.code === 'unavailable'
+          ? '네트워크 연결을 확인해주세요.'
+          : '회원가입 중 오류가 발생했습니다. 다시 시도해주세요.';
+        
+        dispatch(showToast({
+          type: 'error',
+          message: errorMessage
+        }));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -317,15 +456,41 @@ function RegisterPage() {
             <label className={`block text-sm font-medium mb-1 ${currentTheme?.textPrimary || 'text-gray-700'}`}>
               닉네임 *
             </label>
-            <input
-              type="text"
-              name="displayName"
-              value={userData.displayName}
-              onChange={handleInputChange}
-              placeholder="사용하실 닉네임을 입력해주세요"
-              className={`w-full px-3 py-2 rounded-md transition-colors ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputText || 'text-gray-900'} ${currentTheme?.inputBorder || 'border border-gray-300'} ${currentTheme?.inputFocus || 'focus:border-blue-500 focus:ring-blue-300'}`}
-              required
-            />
+            <div className="relative">
+              <input
+                type="text"
+                name="displayName"
+                value={userData.displayName}
+                onChange={handleInputChange}
+                placeholder="사용하실 닉네임을 입력해주세요"
+                className={`w-full px-3 py-2 pr-10 rounded-md transition-colors ${
+                  errors.displayName 
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-300' 
+                    : `${currentTheme?.inputBorder || 'border border-gray-300'} ${currentTheme?.inputFocus || 'focus:border-blue-500 focus:ring-blue-300'}`
+                } ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputText || 'text-gray-900'}`}
+                required
+              />
+              {/* 닉네임 체크 상태 표시 */}
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                {nicknameChecking && (
+                  <LoadingSpinner />
+                )}
+                {!nicknameChecking && nicknameAvailable === true && (
+                  <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {!nicknameChecking && nicknameAvailable === false && (
+                  <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            {/* 에러 메시지 표시 */}
+            {errors.displayName && (
+              <p className="mt-1 text-sm text-red-600">{errors.displayName}</p>
+            )}
           </div>
 
           {/* 생년월일 입력 */}
@@ -338,9 +503,17 @@ function RegisterPage() {
               name="birthDate"
               value={userData.birthDate}
               onChange={handleInputChange}
-              className={`w-full px-3 py-2 rounded-md transition-colors ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputText || 'text-gray-900'} ${currentTheme?.inputBorder || 'border border-gray-300'} ${currentTheme?.inputFocus || 'focus:border-blue-500 focus:ring-blue-300'}`}
+              className={`w-full px-3 py-2 rounded-md transition-colors ${
+                errors.birthDate 
+                  ? 'border-red-500 focus:border-red-500 focus:ring-red-300' 
+                  : `${currentTheme?.inputBorder || 'border border-gray-300'} ${currentTheme?.inputFocus || 'focus:border-blue-500 focus:ring-blue-300'}`
+              } ${currentTheme?.inputBg || 'bg-white'} ${currentTheme?.inputText || 'text-gray-900'}`}
               required
             />
+            {/* 에러 메시지 표시 */}
+            {errors.birthDate && (
+              <p className="mt-1 text-sm text-red-600">{errors.birthDate}</p>
+            )}
           </div>
 
           {/* 제출 버튼 */}

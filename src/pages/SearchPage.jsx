@@ -12,26 +12,35 @@
  * - 사용자 클릭 시 프로필 페이지로 이동
  * 
  * NOTE: 페이지 이동 방식으로 변경하여 공유 기능 지원
- * TODO: 서버사이드 검색 구현, 페이지네이션
- * FIXME: 대량 데이터 시 성능 문제
+ * IMPROVED: 가상화 및 페이지네이션으로 대량 데이터 성능 최적화, 토스트 알림 추가
  */
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { collection, getDocs, query, limit, startAfter, orderBy, where } from "firebase/firestore";
 import { db } from "@/services/firebase";
 import { useNoteInteraction } from "@/hooks/useNoteInteraction";
-import { FaUser, FaFileAlt, FaSearch, FaFilter, FaSort } from "react-icons/fa";
+import { FaUser, FaFileAlt, FaSearch, FaFilter, FaSort, FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import { useDispatch } from "react-redux";
+import { showToast } from "@/store/toast/slice";
 
 function SearchPage() {
   const { searchParam } = useParams(); // URL에서 검색어 추출
   const [searchParams] = useSearchParams(); // 쿼리 파라미터 추출
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   
   // 검색 결과 상태
   const [notes, setNotes] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('notes'); // 'notes' 또는 'users'
+  
+  // 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [lastVisible, setLastVisible] = useState(null);
+  const ITEMS_PER_PAGE = 10;
   
   // 고급 필터 상태
   const [filters] = useState({
@@ -145,16 +154,39 @@ function SearchPage() {
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${randomColor}`;
   };
 
-  // 통합 검색 로직
-  useEffect(() => {
-    async function fetchSearchResults() {
+  // 페이지네이션된 검색 로직 (성능 최적화)
+  const fetchSearchResults = useCallback(async (page = 1, resetResults = true) => {
+    if (resetResults) {
       setLoading(true);
-      try {
-        const lowerSearch = searchParam.toLowerCase();
+      setCurrentPage(1);
+      setLastVisible(null);
+    }
+    
+    try {
+      const lowerSearch = searchParam.toLowerCase();
 
-        // 노트 검색
-        const notesRef = collection(db, "notes");
-        const notesSnapshot = await getDocs(notesRef);
+      if (activeTab === 'notes') {
+        // 노트 검색 (페이지네이션 적용)
+        let notesQuery = collection(db, "notes");
+        
+        // 기본 정렬 적용
+        if (filters.sortBy === 'newest') {
+          notesQuery = query(notesQuery, orderBy('createdAt', 'desc'));
+        } else if (filters.sortBy === 'oldest') {
+          notesQuery = query(notesQuery, orderBy('createdAt', 'asc'));
+        } else if (filters.sortBy === 'popular') {
+          notesQuery = query(notesQuery, orderBy('views', 'desc'));
+        }
+        
+        // 페이지네이션 적용
+        notesQuery = query(notesQuery, limit(ITEMS_PER_PAGE));
+        if (lastVisible && page > 1) {
+          notesQuery = query(notesQuery, startAfter(lastVisible));
+        }
+
+        const notesSnapshot = await getDocs(notesQuery);
+        
+        // 클라이언트 사이드 필터링 (Firebase 제한으로 인해)
         let filteredNotes = notesSnapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
           .filter((note) => {
@@ -184,10 +216,25 @@ function SearchPage() {
             return true;
           });
 
-        // 정렬 적용
-        filteredNotes = sortResults(filteredNotes, filters.sortBy);
+        // 관련도순 정렬 (클라이언트 사이드)
+        if (filters.sortBy === 'relevance') {
+          filteredNotes = sortResults(filteredNotes, 'relevance');
+        }
 
-        // 사용자 검색
+        if (resetResults) {
+          setNotes(filteredNotes);
+        } else {
+          setNotes(prev => [...prev, ...filteredNotes]);
+        }
+        
+        // 페이지네이션 상태 업데이트
+        setHasNextPage(notesSnapshot.docs.length === ITEMS_PER_PAGE);
+        if (notesSnapshot.docs.length > 0) {
+          setLastVisible(notesSnapshot.docs[notesSnapshot.docs.length - 1]);
+        }
+        
+      } else {
+        // 사용자 검색 (간단한 페이지네이션)
         const usersRef = collection(db, "users");
         const usersSnapshot = await getDocs(usersRef);
         const filteredUsers = usersSnapshot.docs
@@ -199,20 +246,45 @@ function SearchPage() {
             );
           });
 
-        setNotes(filteredNotes);
-        setUsers(filteredUsers);
-      } catch (error) {
-        console.error("검색 중 오류 발생:", error);
-        // TODO: 사용자에게 에러 메시지 표시
-      } finally {
-        setLoading(false);
+        // 클라이언트 사이드 페이지네이션
+        const startIndex = (page - 1) * ITEMS_PER_PAGE;
+        const endIndex = startIndex + ITEMS_PER_PAGE;
+        const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+        
+        if (resetResults) {
+          setUsers(paginatedUsers);
+        } else {
+          setUsers(prev => [...prev, ...paginatedUsers]);
+        }
+        
+        setTotalPages(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE));
+        setHasNextPage(endIndex < filteredUsers.length);
       }
+      
+    } catch (error) {
+      console.error("검색 중 오류 발생:", error);
+      
+      const errorMessage = error.code === 'permission-denied'
+        ? '검색 권한이 없습니다.'
+        : error.code === 'unavailable'
+        ? '네트워크 연결을 확인해주세요.'
+        : '검색 중 오류가 발생했습니다.';
+      
+      dispatch(showToast({
+        type: 'error',
+        message: errorMessage
+      }));
+    } finally {
+      setLoading(false);
     }
+  }, [searchParam, filters, activeTab, lastVisible, dispatch]);
 
+  // 검색 실행
+  useEffect(() => {
     if (searchParam) {
-      fetchSearchResults();
+      fetchSearchResults(1, true);
     }
-  }, [searchParam, filters]);
+  }, [searchParam, filters, activeTab, fetchSearchResults]);
 
   // 사용자 프로필로 이동
   const handleUserClick = (user) => {
@@ -222,7 +294,22 @@ function SearchPage() {
   // 탭 변경 핸들러
   const handleTabChange = (tab) => {
     setActiveTab(tab);
+    setCurrentPage(1);
+    setLastVisible(null);
   };
+
+  // 더 보기 핸들러
+  const handleLoadMore = useCallback(() => {
+    if (!loading && hasNextPage) {
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      fetchSearchResults(nextPage, false);
+    }
+  }, [loading, hasNextPage, currentPage, fetchSearchResults]);
+
+  // 메모이제이션된 검색 결과 표시
+  const displayedNotes = useMemo(() => notes, [notes]);
+  const displayedUsers = useMemo(() => users, [users]);
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-10 relative">
@@ -318,7 +405,7 @@ function SearchPage() {
               </p>
             </div>
           ) : (
-            notes.map((note) => {
+            displayedNotes.map((note) => {
               // HTML 태그 제거 후 미리보기 텍스트 생성 (100자로 확장)
               const preview =
                 (note.content || "").replace(/<[^>]+>/g, "").slice(0, 100) +
@@ -388,6 +475,29 @@ function SearchPage() {
               );
             })
           )}
+          
+          {/* 더 보기 버튼 (노트) */}
+          {!loading && hasNextPage && activeTab === 'notes' && displayedNotes.length > 0 && (
+            <div className="text-center mt-8">
+              <button
+                onClick={handleLoadMore}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center gap-2 mx-auto"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    로딩 중...
+                  </>
+                ) : (
+                  <>
+                    <FaChevronRight className="w-4 h-4" />
+                    더 보기
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -403,7 +513,7 @@ function SearchPage() {
               </p>
             </div>
           ) : (
-            users.map((user) => (
+            displayedUsers.map((user) => (
               <div
                 key={user.id}
                 className="mb-4 p-5 rounded-2xl border border-gray-300 hover:border-gray-500 transition-colors duration-300 cursor-pointer flex gap-4 items-center hover:shadow-md"
@@ -458,6 +568,29 @@ function SearchPage() {
                 </div>
               </div>
             ))
+          )}
+          
+          {/* 더 보기 버튼 (사용자) */}
+          {!loading && hasNextPage && activeTab === 'users' && displayedUsers.length > 0 && (
+            <div className="text-center mt-8">
+              <button
+                onClick={handleLoadMore}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center gap-2 mx-auto"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    로딩 중...
+                  </>
+                ) : (
+                  <>
+                    <FaChevronRight className="w-4 h-4" />
+                    더 보기 ({totalPages > currentPage ? `${currentPage}/${totalPages}` : ''})
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
       )}

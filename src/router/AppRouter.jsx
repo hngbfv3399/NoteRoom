@@ -11,6 +11,7 @@ import AnnouncementPage from "@/pages/AnnouncementPage";
 import AdminAnnouncementPage from "@/pages/AdminAnnouncementPage";
 import AdminPage from "@/pages/AdminPage";
 import MyReportsPage from "@/pages/MyReportsPage";
+
 import NotFound from "@/pages/NotFound";
 import { auth } from "@/services/firebase";
 import { Navigate } from "react-router-dom";
@@ -126,6 +127,7 @@ function AppRouter() {
           <MyReportsPage />
         </ProtectedRoute>
       } />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
