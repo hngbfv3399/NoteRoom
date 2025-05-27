@@ -6,6 +6,7 @@
  * - 감정 선택 모달 관리
  * - 감정 알림 시스템
  * - 월별 초기화 기능
+ * - AI 월별 감정 분석
  */
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,6 +18,8 @@ import { getThemeClass, getModalThemeClass } from '@/utils/themeHelper';
 import EmotionDashboard from '@/features/EmotionTracking/EmotionDashboard';
 import EmotionSelectionModal from '@/features/EmotionTracking/EmotionSelectionModal';
 import EmotionReminder from '@/features/EmotionTracking/EmotionReminder';
+import EmotionAnalysisModal from '@/features/EmotionTracking/EmotionAnalysisModal';
+import EmotionDiaryModal from '@/features/EmotionTracking/EmotionDiaryModal';
 import ThemedButton from '@/components/ui/ThemedButton';
 import ModalOne from '@/features/MainHome/ModalOne';
 import { ROUTES } from '@/constants/routes';
@@ -33,7 +36,11 @@ function EmotionTrackingPage() {
   
   const [showEmotionModal, setShowEmotionModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [showDiaryModal, setShowDiaryModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [emotionDataForAnalysis, setEmotionDataForAnalysis] = useState(null);
+  const [monthlyStatsForAnalysis, setMonthlyStatsForAnalysis] = useState(null);
 
   // 감정 선택 모달 열기
   const handleOpenEmotionModal = () => {
@@ -45,9 +52,78 @@ function EmotionTrackingPage() {
     setShowEmotionModal(false);
   };
 
+  // 감정 일기 모달 열기
+  const handleOpenDiaryModal = () => {
+    setShowDiaryModal(true);
+  };
+
+  // 감정 일기 모달 닫기
+  const handleCloseDiaryModal = () => {
+    setShowDiaryModal(false);
+  };
+
+  // AI 분석 모달 열기
+  const handleOpenAnalysisModal = async () => {
+    try {
+      if (!auth.currentUser) {
+        alert('로그인이 필요합니다.');
+        return;
+      }
+
+      // 현재 사용자의 감정 데이터 가져오기
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        alert('사용자 데이터를 찾을 수 없습니다.');
+        return;
+      }
+
+      const userData = userDoc.data();
+      const emotionTracking = userData.emotionTracking || {};
+      const dailyEmotions = emotionTracking.dailyEmotions || [];
+      const monthlyStats = emotionTracking.monthlyStats || {};
+
+      if (dailyEmotions.length === 0) {
+        alert('분석할 감정 데이터가 없습니다. 먼저 감정을 기록해주세요.');
+        return;
+      }
+
+      setEmotionDataForAnalysis(dailyEmotions);
+      setMonthlyStatsForAnalysis(monthlyStats);
+      setShowAnalysisModal(true);
+    } catch (error) {
+      console.error('감정 데이터 로드 실패:', error);
+      alert('데이터를 불러오는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // AI 분석 모달 닫기
+  const handleCloseAnalysisModal = () => {
+    setShowAnalysisModal(false);
+    setEmotionDataForAnalysis(null);
+    setMonthlyStatsForAnalysis(null);
+  };
+
+  // 월 1일 이후인지 확인하는 함수
+  const isAfterFirstOfMonth = () => {
+    const today = new Date();
+    return today.getDate() > 1;
+  };
+
   // 감정 저장 완료 콜백 - 대시보드 새로고침 추가
   const handleEmotionSaved = async (emotionEntry) => {
     console.log('감정이 저장되었습니다:', emotionEntry);
+    
+    // 대시보드 즉시 새로고침
+    if (dashboardRef.current) {
+      await dashboardRef.current.refreshData();
+    }
+  };
+
+  // 감정 일기 저장 완료 콜백
+  const handleDiarySaved = async (diaryEntry) => {
+    console.log('감정 일기가 저장되었습니다:', diaryEntry);
     
     // 대시보드 즉시 새로고침
     if (dashboardRef.current) {
@@ -141,6 +217,16 @@ function EmotionTrackingPage() {
           </div>
           
           <div className="flex gap-3">
+            {/* AI 분석 버튼 - 월 1일 이후에만 표시 */}
+            {isAfterFirstOfMonth() && (
+              <ThemedButton
+                onClick={handleOpenAnalysisModal}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2"
+              >
+                <span>🧠</span>
+                AI 감정 분석
+              </ThemedButton>
+            )}
             <ThemedButton
               onClick={() => setShowResetModal(true)}
               variant="secondary"
@@ -162,6 +248,53 @@ function EmotionTrackingPage() {
           ref={dashboardRef}
           onOpenEmotionModal={handleOpenEmotionModal} 
         />
+
+        {/* 감정 기록 섹션 */}
+        <div className="mt-8">
+          <h3 className={`text-xl font-semibold mb-4 ${currentTheme.textColor}`}>
+            📝 감정 기록하기
+          </h3>
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* 대표 감정 기록 */}
+            <div className={`p-6 rounded-lg border ${currentTheme.cardBg} ${currentTheme.borderColor}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">🎭</span>
+                <h4 className={`text-lg font-semibold ${currentTheme.textColor}`}>
+                  오늘의 대표 감정
+                </h4>
+              </div>
+              <p className={`text-sm ${currentTheme.textColor} opacity-70 mb-4`}>
+                하루 한 번, 오늘을 대표하는 감정을 선택해주세요. AI 분석의 주요 데이터로 활용됩니다.
+              </p>
+              <ThemedButton
+                onClick={handleOpenEmotionModal}
+                className="w-full"
+              >
+                대표 감정 기록하기
+              </ThemedButton>
+            </div>
+
+            {/* 감정 일기 */}
+            <div className={`p-6 rounded-lg border ${currentTheme.cardBg} ${currentTheme.borderColor}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-2xl">📝</span>
+                <h4 className={`text-lg font-semibold ${currentTheme.textColor}`}>
+                  감정 일기
+                </h4>
+              </div>
+              <p className={`text-sm ${currentTheme.textColor} opacity-70 mb-4`}>
+                언제든지 자유롭게 감정을 기록해보세요. 암호화되어 안전하게 보관됩니다.
+              </p>
+              <ThemedButton
+                onClick={handleOpenDiaryModal}
+                variant="secondary"
+                className="w-full"
+              >
+                감정 일기 작성하기
+              </ThemedButton>
+            </div>
+          </div>
+        </div>
 
         {/* 감정 알림 시스템 */}
         <div className="mt-8">
@@ -249,10 +382,35 @@ function EmotionTrackingPage() {
               </ul>
             </div>
           </div>
+          
+          {/* AI 분석 안내 */}
+          <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h4 className={`font-medium mb-2 ${currentTheme.textColor} flex items-center gap-2`}>
+              <span>🧠</span> AI 감정 분석
+            </h4>
+            <p className={`text-sm ${currentTheme.textColor} opacity-80`}>
+              월 1일 이후부터 AI가 당신의 감정 패턴을 분석하여 개인화된 인사이트와 조언을 제공합니다.
+            </p>
+          </div>
         </div>
+
+        {/* AI 감정 분석 모달 */}
+        <EmotionAnalysisModal
+          isOpen={showAnalysisModal}
+          onClose={handleCloseAnalysisModal}
+          emotionData={emotionDataForAnalysis}
+          monthlyStats={monthlyStatsForAnalysis}
+        />
+
+        {/* 감정 일기 모달 */}
+        <EmotionDiaryModal
+          isOpen={showDiaryModal}
+          onClose={handleCloseDiaryModal}
+          onDiarySaved={handleDiarySaved}
+        />
       </div>
     </div>
   );
 }
 
-export default EmotionTrackingPage; 
+export default EmotionTrackingPage;

@@ -18,8 +18,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import PropTypes from 'prop-types';
-import { updateNoteInFirestore, deleteNoteFromFirestore } from '@/utils/firebaseNoteDataUtil';
-import ThemedButton from '@/components/ui/ThemedButton';
+import { getModalTheme, getInputTheme, getButtonTheme } from '@/utils/themeHelper';
+import ThemedButton from './ui/ThemedButton';
 
 const categories = [
   "일상",
@@ -116,10 +116,7 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
         content: editor.getHTML(),
       };
 
-
-
-
-
+      const { updateNoteInFirestore } = await import('@/utils/firebaseNoteDataUtil');
       await updateNoteInFirestore(note.id, updateData);
       
 
@@ -153,6 +150,7 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
       setError(null);
       setIsLoading(true);
 
+      const { deleteNoteFromFirestore } = await import('@/utils/firebaseNoteDataUtil');
       await deleteNoteFromFirestore(note.id, note.userUid || note.userId);
       
       // 부모 컴포넌트에 삭제 알림

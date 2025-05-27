@@ -9,7 +9,7 @@
  */
 import React, { useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { doc, updateDoc, arrayUnion, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/services/firebase';
 import { EMOTION_TYPES, EMOTION_META } from '@/utils/emotionConstants';
 import { getModalThemeClass } from '@/utils/themeHelper';
@@ -94,9 +94,16 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
         settings: { reminderTime: "21:00", reminderEnabled: true } 
       };
       
+      // 기존 감정 기록에서 오늘 날짜 기록 제거 (중복 방지)
+      const existingEmotions = currentEmotionTracking.dailyEmotions || [];
+      const filteredEmotions = existingEmotions.filter(emotion => emotion.date !== today);
+      
+      // 새로운 감정 기록 추가
+      const updatedDailyEmotions = [...filteredEmotions, emotionEntry];
+      
       const updatedEmotionTracking = {
         ...currentEmotionTracking,
-        dailyEmotions: arrayUnion(emotionEntry),
+        dailyEmotions: updatedDailyEmotions,
         settings: {
           ...currentEmotionTracking.settings,
           lastReminder: serverTimestamp()
@@ -175,8 +182,11 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
             </button>
             
             <h2 className={`text-2xl font-bold mb-6 text-center ${currentTheme.textColor}`}>
-              🎭 오늘 기분이 어떠신가요?
+              🎭 오늘의 대표 감정은?
             </h2>
+            <p className={`text-center mb-6 ${currentTheme.textColor} opacity-70`}>
+              하루 한 번, 오늘을 대표하는 감정을 선택해주세요
+            </p>
 
             {/* 감정 선택 그리드 */}
             <div className="grid grid-cols-3 md:grid-cols-4 gap-3 mb-6">
@@ -241,12 +251,12 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
                   {/* 메모 입력 */}
                   <div>
                     <label className={`block text-sm font-medium mb-2 ${currentTheme.textColor}`}>
-                      메모 (선택사항)
+                      간단한 메모 (선택사항)
                     </label>
                     <textarea
                       value={note}
                       onChange={handleNoteChange}
-                      placeholder="오늘의 감정에 대해 간단히 적어보세요..."
+                      placeholder="오늘의 대표 감정에 대해 간단히 적어보세요..."
                       className={`w-full p-3 rounded-lg resize-none border-2 focus:outline-none transition-colors ${currentTheme.inputBg} ${currentTheme.inputText} ${currentTheme.inputBorder} ${currentTheme.inputFocus}`}
                       rows="3"
                       maxLength="200"
@@ -275,7 +285,7 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
                 disabled={!selectedEmotion || isSaving}
                 className="disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? '저장 중...' : '감정 기록하기'}
+                {isSaving ? '저장 중...' : '대표 감정 기록하기'}
               </ThemedButton>
             </div>
           </div>

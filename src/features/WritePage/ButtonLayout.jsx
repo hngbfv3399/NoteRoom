@@ -334,27 +334,16 @@ function ButtonLayout({ editor, title, category, editId }) {
   };
 
   const handleSubmit = async () => {
-
-
-
-    
     const user = auth.currentUser;
     if (!user) {
       setError("로그인이 필요합니다.");
       return;
     }
 
-
-
-
-
-
-
     try {
       setError(null);
       setUploading(true);
   
-      
       // Rate Limiting 검증
       if (!checkNoteWriteLimit(user.uid)) {
         throw new Error("글 작성 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
@@ -363,24 +352,16 @@ function ButtonLayout({ editor, title, category, editId }) {
       // 입력 검증 및 정규화
       const validatedData = validateInput();
   
-
       let uploadedImageUrl = null;
       
       // 편집 모드에서 기존 이미지 처리
       if (isEditMode) {
-    
-    
-    
-        
         // 새로운 이미지가 선택된 경우
         if (imageFile) {
-      
           uploadedImageUrl = await uploadImage();
-      
         } else if (existingImageUrl) {
           // 기존 이미지 URL 사용 (새 이미지를 선택하지 않은 경우)
           uploadedImageUrl = existingImageUrl;
-      
         } else {
           // 기존 노트의 이미지 유지 (편집 시 이미지를 변경하지 않은 경우)
           try {
@@ -390,7 +371,6 @@ function ButtonLayout({ editor, title, category, editId }) {
               const existingNote = noteDoc.data();
               // 썸네일 필드 우선 확인, 없으면 image 필드 확인
               uploadedImageUrl = existingNote.thumbnail || existingNote.image || null;
-          
             }
           } catch (error) {
             console.warn("기존 노트 이미지 로드 실패:", error);
@@ -406,45 +386,21 @@ function ButtonLayout({ editor, title, category, editId }) {
       // HTML 콘텐츠 정화
       const editorContent = editor.getHTML();
   
-  
-  
-  
-      
       // 에디터의 텍스트만 추출해보기
       const editorText = editor.getText();
   
-  
-  
-  
-  
-      
-      // 에디터 내부 상태 확인
-  
-  
-  
-  
-  
-      
       const sanitizedContent = sanitizeHtml(editorContent);
   
-  
-  
-      
       // content에서 텍스트만 추출해보기
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = sanitizedContent || '';
       const textOnly = tempDiv.textContent || tempDiv.innerText || '';
   
-  
-      
       // 빈 p 태그 확인
       const emptyPTags = (sanitizedContent.match(/<p><\/p>/g) || []).length;
       const emptyPTagsWithSpace = (sanitizedContent.match(/<p>\s*<\/p>/g) || []).length;
   
-  
-      
       if (isEditMode) {
-    
         // 편집 모드: 허용된 필드만 업데이트
         const updateData = {
           title: validatedData.title,
@@ -458,14 +414,9 @@ function ButtonLayout({ editor, title, category, editId }) {
           updateData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
         }
 
-    
-    
-    
-
+        const { updateNoteInFirestore } = await import("@/utils/firebaseNoteDataUtil");
         await updateNoteInFirestore(editId, updateData);
-    
       } else {
-    
         // 새 글 작성 모드: 전체 노트 데이터 생성
         const noteData = {
           title: validatedData.title,
@@ -483,9 +434,8 @@ function ButtonLayout({ editor, title, category, editId }) {
           noteData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
         }
 
-    
+        const { saveNoteToFirestore } = await import("@/utils/firebaseNoteDataUtil");
         await saveNoteToFirestore(noteData);
-    
       }
       
       // 저장 성공 후 메인 페이지로 이동하면서 새로고침 플래그 전달
@@ -502,7 +452,6 @@ function ButtonLayout({ editor, title, category, editId }) {
       console.error("노트 저장 실패:", error);
     } finally {
       setUploading(false);
-  
     }
   };
 
@@ -523,8 +472,6 @@ function ButtonLayout({ editor, title, category, editId }) {
               // 기존 이미지가 있으면 썸네일 섹션을 자동으로 표시
               setShowThumbnail(true);
               setExistingImageUrl(existingImageUrl);
-              
-          
             }
           }
         } catch (error) {
@@ -839,20 +786,6 @@ function ButtonLayout({ editor, title, category, editId }) {
             </ThemedButton>
             <ThemedButton 
               onClick={() => {
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
                 handleSubmit();
               }} 
               disabled={uploading || (!isEditMode && !(imageFile || existingImageUrl)) || !isContentComplete}

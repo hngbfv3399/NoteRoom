@@ -63,7 +63,15 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
     if (!emotionData?.tracking?.dailyEmotions) return [];
 
     const now = new Date();
-    const emotions = emotionData.tracking.dailyEmotions;
+    const emotions = emotionData.tracking.dailyEmotions
+      .filter(emotion => {
+        // 감정 일기인 경우 (type: 'diary')
+        if (emotion.type === 'diary') {
+          return true; // 감정 일기는 emotions 배열을 가지므로 별도 처리
+        }
+        // 대표 감정인 경우
+        return emotion.emotion && EMOTION_META[emotion.emotion];
+      });
 
     switch (selectedPeriod) {
       case 'week': {
@@ -79,9 +87,9 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
     }
   };
 
-  // 감정 분포 계산
+  // 감정 분포 계산 (대표 감정만)
   const getEmotionStats = () => {
-    const filteredEmotions = getFilteredEmotions();
+    const filteredEmotions = getFilteredEmotions().filter(emotion => emotion.type !== 'diary'); // 대표 감정만
     const stats = {};
 
     Object.keys(EMOTION_META).forEach(emotion => {
@@ -94,8 +102,8 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
 
     // 평균 강도 계산
     filteredEmotions.forEach(emotion => {
-      if (stats[emotion.emotion]) {
-        stats[emotion.emotion].avgIntensity += emotion.intensity;
+      if (emotion.emotion && stats[emotion.emotion]) {
+        stats[emotion.emotion].avgIntensity += emotion.intensity || 0;
       }
     });
 
@@ -108,11 +116,13 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
     return stats;
   };
 
-  // 오늘 감정 기록 여부 확인
+  // 오늘 감정 기록 여부 확인 (대표 감정만)
   const hasTodayEmotion = () => {
     if (!emotionData?.tracking?.dailyEmotions) return false;
     const today = new Date().toISOString().split('T')[0];
-    return emotionData.tracking.dailyEmotions.some(emotion => emotion.date === today);
+    return emotionData.tracking.dailyEmotions
+      .filter(emotion => emotion.type !== 'diary' && emotion.emotion && EMOTION_META[emotion.emotion]) // 대표 감정만 체크
+      .some(emotion => emotion.date === today);
   };
 
   if (loading) {
@@ -222,7 +232,44 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
               .sort((a, b) => new Date(b.date) - new Date(a.date))
               .slice(0, 10)
               .map((emotion, index) => {
+                // 감정 일기인 경우
+                if (emotion.type === 'diary') {
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${currentTheme.bgColor} hover:opacity-80`}
+                    >
+                      <span className="text-2xl">📝</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${currentTheme.textColor}`}>
+                            감정 일기
+                          </span>
+                          <span className={`text-sm ${currentTheme.textColor} opacity-60`}>
+                            강도 {emotion.intensity}/10
+                          </span>
+                        </div>
+                        <div className={`text-sm ${currentTheme.textColor} opacity-70`}>
+                          {new Date(emotion.date).toLocaleDateString('ko-KR')} {emotion.time}
+                        </div>
+                        {emotion.emotions && emotion.emotions.length > 0 && (
+                          <div className={`text-sm ${currentTheme.textColor} opacity-80 mt-1`}>
+                            감정: {emotion.emotions.map(e => EMOTION_META[e]?.name || e).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                
+                // 대표 감정인 경우
+                if (!emotion.emotion || !EMOTION_META[emotion.emotion]) {
+                  console.warn('유효하지 않은 감정 타입:', emotion.emotion);
+                  return null;
+                }
+                
                 const emotionType = EMOTION_META[emotion.emotion];
+                
                 return (
                   <div
                     key={index}

@@ -13,12 +13,22 @@
  * - 메모이제이션된 컴포넌트 및 콜백
  * - 가상화된 리스트 렌더링
  */
+import React from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useMemo, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { useSearch } from "@/hooks/useSearch";
 import { useNoteInteraction } from "@/hooks/useNoteInteraction";
-import { FaUser, FaFileAlt, FaSearch } from "react-icons/fa";
+import { 
+  FaUser, 
+  FaFileAlt, 
+  FaSearch, 
+  FaEye, 
+  FaComment, 
+  FaHeart,
+  FaUsers,
+  FaEdit
+} from "react-icons/fa";
 import { 
   getPageTheme, 
   getCardTheme, 
@@ -55,7 +65,7 @@ function SearchPage() {
     isLoading: loading, 
     error,
     refetch 
-  } = useSearch(searchParam, filters, activeTab);
+  } = useSearch(searchParam, filters);
 
   // 노트 상호작용 관리 (메모이제이션)
   const { handleNoteClick } = useNoteInteraction({ 
@@ -69,30 +79,37 @@ function SearchPage() {
     return searchResults;
   }, [searchResults]);
 
-  // 카운트 표시용 (로딩 중에도 이전 값 유지)
+  // 카운트 표시용 (항상 실제 숫자 표시)
   const displayCounts = useMemo(() => {
-    if (loading && !searchResults) {
-      return { notesCount: '...', usersCount: '...' };
-    }
     return { 
-      notesCount: notes.length, 
-      usersCount: users.length 
+      notesCount: notes.length || 0, 
+      usersCount: users.length || 0
     };
-  }, [notes.length, users.length, loading, searchResults]);
+  }, [notes.length, users.length]);
 
   // 검색어 하이라이팅 함수 (메모이제이션)
   const highlightText = useCallback((text, searchTerm) => {
     if (!text || !searchTerm) return text;
     
-    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
+    // 문자열로 변환
+    const textStr = String(text);
+    const searchStr = String(searchTerm);
     
-    return parts.map((part, index) => 
-      regex.test(part) ? (
-        <mark key={index} className={`px-1 rounded ${getBadgeTheme(currentTheme, 'warning')}`}>
-          {part}
-        </mark>
-      ) : part
+    const regex = new RegExp(`(${searchStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = textStr.split(regex);
+    
+    return (
+      <React.Fragment>
+        {parts.map((part, index) => 
+          regex.test(part) ? (
+            <mark key={index} className={`px-1 rounded ${getBadgeTheme(currentTheme, 'warning')}`}>
+              {part}
+            </mark>
+          ) : (
+            <span key={index}>{part}</span>
+          )
+        )}
+      </React.Fragment>
     );
   }, [currentTheme]);
 
@@ -243,9 +260,6 @@ function SearchPage() {
                         <h3 className={`text-base sm:text-lg font-semibold mb-2 line-clamp-2 ${getTextThemeClass(currentTheme, 'primary')}`}>
                           {highlightText(note.title, searchParam)}
                         </h3>
-                        <p className={`text-sm line-clamp-3 ${getTextThemeClass(currentTheme, 'secondary')}`}>
-                          {highlightText(note.content?.substring(0, 120) + '...', searchParam)}
-                        </p>
                       </div>
                       
                       <div className={`flex items-center justify-between text-sm mb-3 ${getTextThemeClass(currentTheme, 'tertiary')}`}>
@@ -256,9 +270,18 @@ function SearchPage() {
                       </div>
                       
                       <div className={`flex items-center justify-between text-xs ${getTextThemeClass(currentTheme, 'muted')}`}>
-                        <span>👁️ {note.views || 0}</span>
-                        <span>💬 {note.commentCount || 0}</span>
-                        <span>❤️ {note.likes || 0}</span>
+                        <span className="flex items-center gap-1">
+                          <FaEye />
+                          {note.views || 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FaComment />
+                          {note.commentCount || 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FaHeart />
+                          {note.likes || 0}
+                        </span>
                         <span className="hidden sm:inline">
                           {new Date(note.createdAt?.seconds * 1000).toLocaleDateString()}
                         </span>
@@ -308,8 +331,14 @@ function SearchPage() {
                     
                     {/* 사용자 통계 */}
                     <div className={`flex items-center justify-between mt-3 sm:mt-4 text-xs ${getTextThemeClass(currentTheme, 'muted')}`}>
-                      <span>📝 {user.noteCount || 0}개 노트</span>
-                      <span>👥 {user.followerCount || 0}명 팔로워</span>
+                      <span className="flex items-center gap-1">
+                        <FaEdit />
+                        {user.noteCount || 0}개 노트
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FaUsers />
+                        {user.followerCount || 0}명 팔로워
+                      </span>
                     </div>
                   </div>
                 ))}

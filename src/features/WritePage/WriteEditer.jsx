@@ -1,122 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Color from "@tiptap/extension-color";
-import ListItem from "@tiptap/extension-list-item";
-import TextStyle from "@tiptap/extension-text-style";
-import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import CharacterCount from '@tiptap/extension-character-count';
-import Typography from '@tiptap/extension-typography';
-import Highlight from '@tiptap/extension-highlight';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
-import { Image } from '@tiptap/extension-image';
 import MenuBar from "./MenuBar";
 import ButtonLayout from "./ButtonLayout";
 import "@/styles/WriteEditerStyle.css";
-import { useNavigate } from "react-router-dom";
-import { auth } from "@/services/firebase";
 import LoadingPage from "@/components/LoadingPage";
 import ThemedButton from "@/components/ui/ThemedButton";
 import { useSelector } from 'react-redux';
 
-const CustomImage = Image.configure({
-  inline: true,
-  allowBase64: true,
-}).extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: {
-        default: '300px',
-        renderHTML: attributes => ({
-          width: attributes.width,
-        }),
-      },
-      height: {
-        default: 'auto',
-        renderHTML: attributes => ({
-          height: attributes.height,
-        }),
-      },
-      style: {
-        default: 'object-fit: contain;',
-        renderHTML: attributes => ({
-          style: attributes.style,
-        }),
-      },
-      alignment: {
-        default: 'center',
-        renderHTML: attributes => ({
-          style: `display: block; margin: ${
-            attributes.alignment === 'left' ? '0 auto 0 0' :
-            attributes.alignment === 'right' ? '0 0 0 auto' :
-            '0 auto'
-          };`,
-        }),
-      },
-    }
-  },
-});
-
-const editorExtensions = [
-  StarterKit.configure({
-    bulletList: { keepMarks: true },
-    orderedList: { keepMarks: true },
-    heading: {
-      levels: [1, 2, 3],
-    },
-  }),
-  CustomImage,
-  Color.configure({ types: [TextStyle.name, ListItem.name] }),
-  TextStyle.configure({ types: [ListItem.name] }),
-  TextAlign.configure({
-    types: ['heading', 'paragraph', 'image'],
-    alignments: ['left', 'center', 'right'],
-  }),
-  Underline,
-  Link.configure({
-    openOnClick: false,
-    HTMLAttributes: {
-      class: 'cursor-pointer underline',
-    },
-  }),
-  Placeholder.configure({
-    placeholder: ({ node }) => {
-      // 에디터가 완전히 비어있을 때만 placeholder 표시
-      if (node.type.name === 'doc') {
-        return '';
-      }
-      
-      if (node.type.name === 'paragraph') {
-        // 첫 번째 문단이고 에디터가 비어있을 때만 표시
-        const isFirstParagraph = node.parent?.firstChild === node;
-        const isEditorEmpty = node.parent?.textContent === '';
-        
-        if (isFirstParagraph && isEditorEmpty) {
-          return '내용을 입력하세요...';
-        }
-      }
-      
-      return '';
-    },
-    includeChildren: true,
-    showOnlyWhenEditable: true,
-    showOnlyCurrent: false,
-  }),
-  CharacterCount.configure({
-    limit: 10000,
-  }),
-  Typography,
-  Highlight.configure({
-    multicolor: true,
-  }),
-  Subscript,
-  Superscript,
-];
+// 🚀 에디터 확장들을 동적으로 로드
+const loadEditorExtensions = async () => {
+  const { createEditorExtensions } = await import('./editorExtensions');
+  return createEditorExtensions();
+};
 
 const categories = [
   "일상",
@@ -472,49 +367,42 @@ function CategorySelect({ selectedCategory, handleChange }) {
 }
 
 function EditorController({ onEditorReady, setTitle, title, selectedCategory, handleChange }) {
-  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  
-  // 다크모드 확인을 위한 테마 정보
+  const [editorExtensions, setEditorExtensions] = useState(null);
   const { current } = useSelector((state) => state.theme);
-  
+
+  // 🚀 에디터 확장들을 동적으로 로드
   useEffect(() => {
-    setIsMounted(true);
-    return () => setIsMounted(false);
+    const initializeExtensions = async () => {
+      try {
+        const extensions = await loadEditorExtensions();
+        setEditorExtensions(extensions);
+      } catch (error) {
+        console.error('에디터 확장 로드 실패:', error);
+      }
+    };
+
+    initializeExtensions();
   }, []);
 
   useEffect(() => {
-    if (!auth.currentUser) {
-      alert("로그인이 필요합니다.");
-      navigate("/");
-    }
-  }, [navigate]);
-
-  // 모바일 키보드 감지
-  useEffect(() => {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    setIsMounted(true);
     
-    if (!isMobile) return;
-
     const handleResize = () => {
-      const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const screenHeight = window.screen.height;
-      const heightDifference = screenHeight - viewportHeight;
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const windowHeight = window.innerHeight;
+      const heightDifference = windowHeight - viewportHeight;
       
       setIsKeyboardVisible(heightDifference > 150);
     };
 
     const handleVisualViewportChange = () => {
-      if (window.visualViewport) {
-        const heightDifference = window.screen.height - window.visualViewport.height;
-        setIsKeyboardVisible(heightDifference > 150);
-      }
+      handleResize();
     };
 
     window.addEventListener('resize', handleResize);
-    
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleVisualViewportChange);
     }
@@ -528,7 +416,7 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
   }, []);
 
   const editor = useEditor({
-    extensions: editorExtensions,
+    extensions: editorExtensions || [], // 확장들이 로드될 때까지 빈 배열 사용
     editorProps: {
       attributes: {
         class: `prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none`,
@@ -565,23 +453,20 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
       // 선택 상태 변경 시 처리 (디버깅 로그 제거)
     },
     // 에디터 업데이트 시 디버깅 로그 추가
-    onUpdate: ({ editor }) => {
-    
-    
-    
-    
-    
+    onUpdate: ({ editor: updatedEditor }) => {
+      console.log('에디터 업데이트:', updatedEditor.getHTML());
     },
-  });
+  }, [editorExtensions]); // editorExtensions가 변경될 때 에디터 재생성
 
   useEffect(() => {
-    if (editor && isMounted) {
+    if (editor && isMounted && editorExtensions) {
       setIsLoading(false);
       onEditorReady(editor);
     }
-  }, [editor, isMounted, onEditorReady]);
+  }, [editor, isMounted, onEditorReady, editorExtensions]);
 
-  if (isLoading) {
+  // 확장들이 로드되지 않았거나 에디터가 로딩 중일 때
+  if (isLoading || !editorExtensions) {
     return <LoadingPage />;
   }
 
@@ -644,20 +529,10 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
 }
 
 export default function WriteEditor({ editId }) {
-
-
-
-
-  
   const [editor, setEditor] = useState(null);
   const [title, setTitle] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [isLoadingNote, setIsLoadingNote] = useState(!!editId);
-
-
-
-
-
 
   const handleChange = (e) => {
     setSelectedCategory(e.target.value);
@@ -665,42 +540,12 @@ export default function WriteEditor({ editId }) {
 
   // 기존 노트 불러오기
   useEffect(() => {
-  
-  
-  
-  
-  
-  
-    
     if (editId && editor && editor.isInitialized) {
-    
       const loadExistingNote = async () => {
         try {
           setIsLoadingNote(true);
-        
-        
-          
-          // 노트 데이터 불러오기 로직 추가 필요
           const { getNoteById } = await import("@/utils/firebaseNoteDataUtil");
           const noteData = await getNoteById(editId);
-          
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-          
-          // content를 텍스트로만 추출해보기
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = noteData?.content || '';
-          console.log("텍스트 추출:", tempDiv.textContent || tempDiv.innerText || '');
-        
-        
           
           if (noteData) {
             setTitle(noteData.title || "");
@@ -709,11 +554,9 @@ export default function WriteEditor({ editId }) {
             // 에디터에 content 설정
             const content = noteData.content || "";
           
-            
             if (content) {
               // TipTap 에디터에 content 설정 - 안전한 방법 사용
               try {
-              
                 console.log("에디터 상태 확인:", {
                   isDestroyed: editor.isDestroyed,
                   isFocused: editor.isFocused,
@@ -723,24 +566,17 @@ export default function WriteEditor({ editId }) {
                 // 방법 1: 에디터 초기화 후 content 설정
                 editor.commands.clearContent();
               
-                
-                // 잠시 기다린 후 content 설정
                 setTimeout(() => {
                   if (editor && !editor.isDestroyed) {
                     try {
-                    
                       // HTML 문자열을 직접 설정
                       editor.commands.setContent(content, false, {
                         preserveWhitespace: 'full'
                       });
                     
-                      
                       // 설정 후 즉시 확인
-                      const immediateContent = editor.getHTML();
+                      editor.getHTML();
                     
-                    
-                      
-                      // 설정 후 확인
                       setTimeout(() => {
                         const currentContent = editor.getHTML();
                       
@@ -752,14 +588,11 @@ export default function WriteEditor({ editId }) {
                         
                         // 만약 여전히 비어있다면 강제로 HTML 삽입
                         if (currentContent.length <= 20) { // <p></p> 정도의 길이
-                        
-                        
                           editor.commands.insertContent(content);
                           
                           // 강제 삽입 후 다시 확인
                           setTimeout(() => {
-                            const finalContent = editor.getHTML();
-                          
+                            editor.getHTML();
                           }, 100);
                         }
                       }, 200);
@@ -768,27 +601,21 @@ export default function WriteEditor({ editId }) {
                       
                       // 방법 2: insertContent 사용
                       try {
-                      
                         editor.commands.insertContent(content);
                       
-                        
                         setTimeout(() => {
-                          const insertedContent = editor.getHTML();
-                        
+                          editor.getHTML();
                         }, 100);
                       } catch (insertError) {
                         console.error("insertContent도 실패:", insertError);
                         
                         // 방법 3: 직접 DOM 조작 (최후의 수단)
                         try {
-                        
                           const editorElement = editor.view.dom;
                           editorElement.innerHTML = content;
                         
-                          
                           setTimeout(() => {
-                            const domContent = editorElement.innerHTML;
-                          
+                            editorElement.innerHTML;
                           }, 100);
                         } catch (domError) {
                           console.error("DOM 조작도 실패:", domError);
@@ -804,26 +631,22 @@ export default function WriteEditor({ editId }) {
                 console.error("전체 content 설정 실패:", error);
               }
             } else {
-            
+              console.log("content가 비어있음");
             }
           } else {
-          
+            console.log("noteData가 없음");
           }
         } catch (error) {
           console.error("노트 불러오기 실패:", error);
           alert("노트를 불러오는 중 오류가 발생했습니다.");
         } finally {
           setIsLoadingNote(false);
-        
         }
       };
 
       loadExistingNote();
     } else {
-    
-    
-    
-    
+      console.log("editId나 editor가 없음");
     }
   }, [editId, editor]);
 
