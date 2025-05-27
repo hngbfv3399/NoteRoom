@@ -1,5 +1,128 @@
 # 변경 로그
 
+## [1.5.0] - 2025-01-02
+
+### 🚀 대규모 UI/UX 개선 및 안정성 강화
+
+#### ✨ 새로운 기능
+- **Redux 기반 토스트 알림 시스템 완전 구축**
+  - `src/store/toast/slice.js` Redux slice 생성
+  - showToast, removeToast, clearAllToasts 액션
+  - 모든 사용자 액션에 대한 즉시 피드백 제공
+  - 에러 상황에 대한 사용자 친화적 메시지
+
+- **재사용 가능한 모달 컴포넌트 시스템**
+  - `AlertModal.jsx`: 타입별 알림, 크기 조절, 테마 적용, 접근성 지원
+  - `ConfirmModal.jsx`: AlertModal 기반 확인 다이얼로그
+  - 기존 ModalOne 컴포넌트 완전 교체
+
+- **LoadingSpinner 컴포넌트**
+  - 다양한 크기/색상 지원
+  - 접근성 고려된 디자인
+  - 테마 시스템 통합
+
+#### 🎨 테마 시스템 대폭 확장
+- **테마 개수 확장**: 6개 → 10개 (67% 증가)
+  - 기존: modern, retro, sunset, midnight, nature, elegant
+  - 추가: ocean, forest, cosmic, vintage
+
+- **테마 속성 대폭 확장**: 6개 → 30개+ (400% 증가)
+  - 기본 색상: textPrimary, shadowColor, successColor, errorColor, warningColor, infoColor
+  - 그라디언트: gradientBg, gradientText
+  - 상태별 배경: successBg, errorBg, warningBg, infoBg
+  - UI 스타일: disabledBg, selectionBg, focusRing, scrollbarTrack 등
+
+- **테마 헬퍼 함수 시스템**: 30개+ 함수 추가
+  - 기본: getPageTheme, getCardTheme, getButtonTheme
+  - 상태별: getStatusTextTheme, getBadgeTheme, getProgressTheme
+  - 향상된: getEnhancedButtonTheme, getInteractiveCardTheme
+  - 특수: getDisabledTheme, getActiveTheme, getFocusRingTheme
+  - UI별: getTableTheme, getTooltipTheme, getDropdownTheme
+
+#### 🛡️ 안정성 및 에러 처리 강화
+- **MemoDetail.jsx 대폭 개선**
+  - dayjs 플러그인 추가 (utc, timezone, relativeTime)
+  - 에러 처리 강화 (try-catch, 재시도 로직, MAX_RETRY_COUNT)
+  - 404, 권한 오류 등 구분된 에러 상태 UI
+  - 공유 기능 개선 (네이티브 공유 API, 메타 태그 업데이트)
+
+- **RegisterPage.jsx 개선**
+  - 중복 닉네임 체크 기능 (checkNicknameAvailability)
+  - 폼 유효성 검사 강화 (validateForm 함수)
+  - 재시도 로직 (retryCount, MAX_RETRY_COUNT)
+  - 실시간 유효성 검사 (디바운싱 적용)
+  - 필드별 에러 메시지 UI 개선
+
+- **SettingPage.jsx 개선**
+  - 기존 ModalOne을 새로운 AlertModal로 교체
+  - 에러 처리 개선 (로그아웃 확인, 마이그레이션 경고)
+  - Redux 토스트 시스템 통합
+
+#### ⚡ 성능 최적화
+- **SearchPage.jsx 성능 최적화**
+  - 대량 데이터 처리를 위한 페이지네이션 구현
+  - useCallback, useMemo 훅 사용한 성능 최적화
+  - Firebase 쿼리 최적화 (limit, startAfter, orderBy)
+  - 더 보기 버튼 추가 (handleLoadMore)
+  - 클라이언트 사이드 페이지네이션
+
+#### 🔔 알림 시스템 개선
+- **notificationUtils.js 개선**
+  - Redux 토스트 시스템 통합
+  - 안전한 Firestore 작업 함수 (safeFirestoreOperation)
+  - 댓글 알림 생성 함수 개선 (병렬 처리, 에러 처리 강화)
+
+#### 🧹 코드 정리 및 최적화
+- **UI 테스트 컴포넌트 제거**
+  - UITestPage.jsx 삭제 (프로덕션 준비)
+  - AppRouter.jsx에서 UI 테스트 라우트 제거
+  - HeaderLayout.jsx에서 UI 테스트 버튼 제거
+
+- **LayoutWrapper 개선**
+  - 새로운 테마 헬퍼 함수 적용
+  - 체계적인 테마 클래스 관리
+  - 부드러운 테마 전환 애니메이션 추가
+
+#### 🔧 기술적 개선
+- **Redux Toolkit 토스트 상태 관리**
+  - 중앙집중식 토스트 상태 관리
+  - 타입별 토스트 (success, error, warning, info)
+  - 자동 제거 및 수동 제거 지원
+
+- **에러 처리 및 재시도 로직**
+  - 네트워크 오류, 권한 오류 구분 처리
+  - 사용자 친화적 에러 메시지
+  - 자동 재시도 메커니즘
+
+- **성능 최적화**
+  - React 훅 최적화 (useCallback, useMemo)
+  - Firebase 쿼리 최적화
+  - 컴포넌트 렌더링 최적화
+
+#### 📦 새로 생성된 파일
+- `src/store/toast/slice.js`: Redux 토스트 상태 관리
+- `src/components/common/AlertModal.jsx`: 재사용 가능한 알림 모달
+- `src/components/common/ConfirmModal.jsx`: 확인 다이얼로그 모달
+- `src/components/LoadingSpinner.jsx`: 로딩 스피너 컴포넌트
+- `src/utils/themeHelper.js`: 30개+ 테마 헬퍼 함수
+
+#### 📊 성과 지표
+- **테마 개수**: 6개 → 10개 (67% 증가)
+- **테마 속성**: 6개 → 30개+ (400% 증가)
+- **헬퍼 함수**: 0개 → 30개+
+- **새 파일 생성**: 10개+
+- **기존 파일 개선**: 15개+
+- **코드 라인 추가**: 2000줄+
+
+### 💡 사용자 경험 개선
+- **즉시 피드백**: 모든 액션에 대한 토스트 알림
+- **에러 처리**: 사용자 친화적 에러 메시지
+- **성능**: 대량 데이터 처리 최적화
+- **접근성**: 모든 컴포넌트에 접근성 고려
+- **일관성**: 통합된 디자인 시스템
+
+---
+
 ## [1.4.0] - 2024-12-30
 
 ### 🔔 PWA 알림 시스템 완전 구현
