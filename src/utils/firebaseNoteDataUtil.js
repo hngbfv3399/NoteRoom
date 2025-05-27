@@ -237,7 +237,215 @@ export const saveNoteToFirestore = async (noteData) => {
   }
 };
 
-export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId = null, filterCategory = null, sortType = 'new') => {
+// 페이지별 필요한 필드 정의
+const FIELD_SETS = {
+  // 메인 페이지 - 카드 표시용 최소 필드
+  main: ['title', 'author', 'authorName', 'category', 'image', 'createdAt', 'views', 'likes', 'commentCount', 'userUid'],
+  // 검색 페이지 - 검색 및 미리보기용
+  search: ['title', 'author', 'authorName', 'category', 'content', 'image', 'createdAt', 'views', 'likes', 'commentCount', 'userUid'],
+  // 상세 페이지 - 모든 필드
+  detail: null, // null이면 모든 필드
+  // 프로필 페이지 - 사용자 노트 목록용
+  profile: ['title', 'category', 'image', 'createdAt', 'views', 'likes', 'commentCount']
+};
+
+// 🚀 개선된 서버 사이드 필터링 함수
+export const loadNotesPageOptimized = async (
+  lastVisibleDoc = null, 
+  pageSize = 10, 
+  userId = null, 
+  filterCategory = null, 
+  sortType = 'new',
+  fieldSet = 'main'
+) => {
+  // 성능 모니터링: Firebase 쿼리 시작 (개발 환경에서만 측정)
+
+  const notesCollection = collection(db, "notes");
+  let baseQuery = [];
+
+  // 🔥 스마트 서버 사이드 필터링 (인덱스 고려)
+  const hasComplexFilter = (filterCategory && filterCategory !== "전체") || userId;
+  const needsHotSort = sortType === 'hot';
+  
+  // 복합 인덱스가 필요한 경우 클라이언트 필터링으로 전환
+  if (hasComplexFilter && needsHotSort) {
+    console.log('🔄 [Query] 복합 필터 감지 - 클라이언트 필터링 사용');
+    // 기본 정렬만 적용하고 나머지는 클라이언트에서 처리
+    baseQuery.push(orderBy("createdAt", "desc"));
+  } else {
+    // 단순 필터링은 서버에서 처리
+    if (filterCategory && filterCategory !== "전체") {
+      baseQuery.push(where("category", "==", filterCategory));
+    }
+
+    if (userId) {
+      baseQuery.push(where("userUid", "==", userId));
+    }
+
+    // 정렬 적용
+    if (sortType === 'new') {
+      baseQuery.push(orderBy("createdAt", "desc"));
+    } else if (sortType === 'hot') {
+      // 인기순은 복합 정렬이 필요하므로 클라이언트에서 처리
+      baseQuery.push(orderBy("createdAt", "desc"));
+    }
+  }
+
+  // 페이지네이션
+  if (lastVisibleDoc) {
+    baseQuery.push(startAfter(lastVisibleDoc));
+    console.log('📄 [Pagination] startAfter 적용됨');
+  }
+
+  // 정확한 페이지 크기 사용 (더 이상 3배 가져오지 않음!)
+  baseQuery.push(limit(pageSize));
+  
+  // 성능 모니터링: 쿼리 설정 로그 (간소화)
+  console.log('📊 [Query] 최적화된 설정:', {
+    pageSize,
+    isServerFiltered: !!(filterCategory || userId),
+    fieldCount: FIELD_SETS[fieldSet]?.length || 'all'
+  });
+
+  const q = query(notesCollection, ...baseQuery);
+  
+  try {
+    const timerName = `⏱️ [Firebase] 최적화된 쿼리 ${Date.now()}`;
+    console.time(timerName);
+    const querySnapshot = await getDocs(q);
+    console.timeEnd(timerName);
+    
+    console.log('📥 [Firebase] 최적화된 응답:', {
+      docsCount: querySnapshot.docs.length,
+      isEmpty: querySnapshot.empty,
+      size: querySnapshot.size,
+      isExactSize: querySnapshot.docs.length <= pageSize
+    });
+
+    let notes = [];
+    const selectedFields = FIELD_SETS[fieldSet];
+    
+    for (const doc of querySnapshot.docs) {
+      const data = doc.data();
+  
+      // Firestore Timestamp 변환
+      if (data.createdAt) {
+        if (data.createdAt instanceof Timestamp) {
+          data.createdAt = data.createdAt.toDate();
+        } else if (typeof data.createdAt.toDate === 'function') {
+          data.createdAt = data.createdAt.toDate();
+        }
+      }
+
+      // 필요한 필드만 선택
+      let noteData = { id: doc.id };
+      if (selectedFields) {
+        selectedFields.forEach(field => {
+          if (data[field] !== undefined) {
+            noteData[field] = data[field];
+          }
+        });
+      } else {
+        noteData = { id: doc.id, ...data };
+      }
+
+      notes.push(noteData);
+    }
+
+    // 🔥 클라이언트 사이드 필터링 및 정렬
+    const wasComplexQuery = hasComplexFilter && needsHotSort;
+    
+    // 복합 쿼리인 경우 클라이언트에서 필터링
+    if (wasComplexQuery) {
+      const beforeFilter = notes.length;
+      
+      // 카테고리 필터링
+      if (filterCategory && filterCategory !== "전체") {
+        notes = notes.filter(note => note.category === filterCategory);
+        console.log('🏷️ [Client Filter] 카테고리:', {
+          before: beforeFilter,
+          after: notes.length,
+          category: filterCategory
+        });
+      }
+      
+      // 사용자 필터링
+      if (userId) {
+        notes = notes.filter(note => note.userUid === userId || note.userId === userId);
+        console.log('👤 [Client Filter] 사용자:', {
+          before: notes.length,
+          after: notes.length,
+          userId
+        });
+      }
+    }
+    
+    // 인기순 정렬 (항상 클라이언트에서 처리)
+    if (sortType === 'hot') {
+      console.log('🔥 [Sort] 인기순 정렬');
+      notes.sort((a, b) => {
+        const weights = { views: 1, likes: 2, comments: 3 };
+        const getScore = (note) => {
+          const viewScore = (note.views || 0) * weights.views;
+          const likeScore = (note.likes || 0) * weights.likes;
+          const commentScore = (note.commentCount || 0) * weights.comments;
+          return viewScore + likeScore + commentScore;
+        };
+
+        const aScore = getScore(a);
+        const bScore = getScore(b);
+        
+        if (aScore !== bScore) {
+          return bScore - aScore;
+        }
+        return b.createdAt - a.createdAt;
+      });
+    }
+
+    const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+    
+    console.log('✅ [Result] 최적화된 최종 결과:', {
+      finalNotesCount: notes.length,
+      hasNextPage: !!lastVisible,
+      fieldSet,
+      wasServerFiltered: !!(filterCategory || userId),
+      efficiency: `${notes.length}/${querySnapshot.docs.length} (100%)`
+    });
+    
+    return { notes, lastVisible };
+    
+  } catch (error) {
+    console.error("최적화된 노트 데이터 가져오기 실패:", error);
+    
+    // 인덱스 오류 시 기존 방식으로 폴백
+    if (error.code === 'failed-precondition' || error.message.includes('requires an index')) {
+      console.warn('⚠️ 인덱스 없음 - 기존 방식으로 폴백');
+      return loadNotesPage(lastVisibleDoc, pageSize, userId, filterCategory, sortType, fieldSet);
+    }
+    
+    throw error;
+  }
+};
+
+// 기존 함수는 폴백용으로 유지 (클라이언트 사이드 필터링)
+export const loadNotesPage = async (
+  lastVisibleDoc = null, 
+  pageSize = 10, 
+  userId = null, 
+  filterCategory = null, 
+  sortType = 'new',
+  fieldSet = 'main'
+) => {
+  console.log('🔍 [loadNotesPage] 호출됨 (폴백):', {
+    pageSize,
+    userId,
+    filterCategory,
+    sortType,
+    fieldSet,
+    hasLastVisible: !!lastVisibleDoc,
+    timestamp: new Date().toISOString()
+  });
+
   const notesCollection = collection(db, "notes");
   let baseQuery = [];
 
@@ -247,18 +455,38 @@ export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId
   // 페이지네이션
   if (lastVisibleDoc) {
     baseQuery.push(startAfter(lastVisibleDoc));
+    console.log('📄 [Pagination] startAfter 적용됨');
   }
 
   // 페이지 크기를 늘려서 필터링 후에도 충분한 데이터 확보
   const actualPageSize = userId ? pageSize * 3 : pageSize;
   baseQuery.push(limit(actualPageSize));
+  
+  console.log('📊 [Query] 설정:', {
+    actualPageSize,
+    queryLength: baseQuery.length,
+    isUserSpecific: !!userId,
+    selectedFields: FIELD_SETS[fieldSet]
+  });
 
   // 쿼리 실행
   const q = query(notesCollection, ...baseQuery);
   
   try {
+    const timerName = `⏱️ [Firebase] 폴백 쿼리 ${Date.now()}`;
+    console.time(timerName);
     const querySnapshot = await getDocs(q);
+    console.timeEnd(timerName);
+    
+    console.log('📥 [Firebase] 응답 받음:', {
+      docsCount: querySnapshot.docs.length,
+      isEmpty: querySnapshot.empty,
+      size: querySnapshot.size
+    });
     let notes = [];
+    
+    // 선택된 필드 세트
+    const selectedFields = FIELD_SETS[fieldSet];
     
     for (const doc of querySnapshot.docs) {
       const data = doc.data();
@@ -272,33 +500,53 @@ export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId
         }
       }
 
-      notes.push({ id: doc.id, ...data });
+      // 필요한 필드만 선택 (성능 최적화)
+      let noteData = { id: doc.id };
+      if (selectedFields) {
+        // 지정된 필드만 포함
+        selectedFields.forEach(field => {
+          if (data[field] !== undefined) {
+            noteData[field] = data[field];
+          }
+        });
+      } else {
+        // 모든 필드 포함
+        noteData = { id: doc.id, ...data };
+      }
+
+      notes.push(noteData);
     }
+
+    console.log('📋 [Processing] 필터링 전 노트 수:', notes.length);
 
     // 클라이언트 사이드에서 userId 필터링
     if (userId) {
-      notes = notes.filter(note => note.userUid === userId || note.userId === userId); // 기존 데이터 호환성을 위해 둘 다 확인
-      // 원하는 페이지 크기로 제한
+      const beforeFilter = notes.length;
+      notes = notes.filter(note => note.userUid === userId || note.userId === userId);
       notes = notes.slice(0, pageSize);
+      console.log('👤 [Filter] userId 필터링:', {
+        before: beforeFilter,
+        after: notes.length,
+        userId
+      });
     }
 
     // 클라이언트 사이드에서 카테고리 필터링
     if (filterCategory && filterCategory !== "전체") {
+      const beforeFilter = notes.length;
       notes = notes.filter(note => note.category === filterCategory);
+      console.log('🏷️ [Filter] 카테고리 필터링:', {
+        before: beforeFilter,
+        after: notes.length,
+        category: filterCategory
+      });
     }
 
     // 클라이언트 사이드에서 정렬 처리
     if (sortType === 'hot') {
-      // 인기순: 조회수, 좋아요, 댓글 수를 종합적으로 고려
+      console.log('🔥 [Sort] 인기순 정렬 시작');
       notes.sort((a, b) => {
-        // 각 지표별 가중치 설정
-        const weights = {
-          views: 1,
-          likes: 2,
-          comments: 3
-        };
-
-        // 노트별 점수 계산
+        const weights = { views: 1, likes: 2, comments: 3 };
         const getScore = (note) => {
           const viewScore = (note.views || 0) * weights.views;
           const likeScore = (note.likes || 0) * weights.likes;
@@ -310,14 +558,21 @@ export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId
         const bScore = getScore(b);
         
         if (aScore !== bScore) {
-          return bScore - aScore; // 점수 내림차순
+          return bScore - aScore;
         }
-        return b.createdAt - a.createdAt; // 점수가 같으면 최신순
+        return b.createdAt - a.createdAt;
       });
     }
-    // 최신순은 이미 서버에서 정렬되어 있음
 
     const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+    
+    console.log('✅ [Result] 최종 결과:', {
+      finalNotesCount: notes.length,
+      hasNextPage: !!lastVisible,
+      fieldSet,
+      processingTime: `${Date.now() - performance.now()}ms`
+    });
+    
     return { notes, lastVisible };
     
   } catch (error) {

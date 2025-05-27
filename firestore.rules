@@ -95,9 +95,9 @@ service cloud.firestore {
                        isValidDraftData(request.resource.data);
     }
 
-    // 노트 컬렉션 규칙 개선 - 2025.05.27 v2.3 (모든 노트 공개)
+    // 노트 컬렉션 규칙 개선 - 2025.05.27 v2.3 (모든 노트 공개) + 검색 최적화
     match /notes/{noteId} {
-      // 읽기: 모든 사용자 허용 (모든 노트 공개)
+      // 읽기: 모든 사용자 허용 (모든 노트 공개) - 검색 성능 최적화
       allow read: if true;
       
       // 생성: 인증된 사용자만 가능
@@ -123,7 +123,16 @@ service cloud.firestore {
         // 3. 댓글 관련 필드 업데이트 (인증된 사용자만 가능)
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment']) ||
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment', 'commentCount']) ||
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'comment']))
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'comment'])) ||
+        
+        // 4. 검색 최적화를 위한 필드 업데이트 (시스템에서 자동 업데이트)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSearched']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'lastSearched']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'searchCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSearched', 'searchCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'lastSearched', 'searchCount']))
       );
       
       // 삭제: 작성자만 가능
@@ -137,7 +146,7 @@ service cloud.firestore {
       }
     }
 
-    // 노트 데이터 유효성 검증 함수
+    // 노트 데이터 유효성 검증 함수 - 검색 필드 추가
     function isValidNoteData(data) {
       return data.keys().hasAll(['title', 'content', 'category', 'userUid']) &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
@@ -147,17 +156,22 @@ service cloud.firestore {
              (!data.keys().hasAny(['isDraft']) || data.isDraft is bool) &&
              (!data.keys().hasAny(['tags']) || (data.tags is list && data.tags.size() <= 10)) &&
              (!data.keys().hasAny(['thumbnail']) || data.thumbnail is string) &&
-             (!data.keys().hasAny(['images']) || (data.images is list && data.images.size() <= 20));
+             (!data.keys().hasAny(['images']) || (data.images is list && data.images.size() <= 20)) &&
+             // 검색 최적화 필드 추가
+             (!data.keys().hasAny(['searchKeywords']) || (data.searchKeywords is list && data.searchKeywords.size() <= 50)) &&
+             (!data.keys().hasAny(['searchCount']) || data.searchCount is number) &&
+             (!data.keys().hasAny(['lastSearched']) || data.lastSearched is timestamp);
     }
 
-    // 노트 업데이트 유효성 검증 함수
+    // 노트 업데이트 유효성 검증 함수 - 검색 필드 추가
     function isValidNoteUpdate(oldData, newData) {
       // 변경 불가능한 필드 확인
       return newData.userUid == oldData.userUid &&
-             // 허용된 필드만 변경되었는지 확인
+             // 허용된 필드만 변경되었는지 확인 (검색 필드 추가)
              newData.diff(oldData).affectedKeys().hasOnly([
                'title', 'content', 'category', 'thumbnail', 'images', 
-               'isPublic', 'isDraft', 'tags', 'updatedAt'
+               'isPublic', 'isDraft', 'tags', 'updatedAt',
+               'searchKeywords', 'searchCount', 'lastSearched'
              ]) &&
              // 새 데이터 유효성 검증
              isValidNoteData(newData);
@@ -188,11 +202,14 @@ service cloud.firestore {
       // 읽기: 알림 대상자 본인만 가능
       allow read: if isAuthenticated() && resource.data.targetUser == request.auth.uid;
       
-      // 생성: 시스템에서 자동 생성 (인증된 사용자)
+      // 생성: 인증된 사용자가 다른 사용자에게 알림 생성 가능 (댓글, 멘션 등)
       allow create: if isAuthenticated()
         && request.resource.data.targetUser is string
         && request.resource.data.type is string
-        && request.resource.data.fromUser == request.auth.uid;
+        && request.resource.data.fromUser == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.isRead == false
+        && request.resource.data.createdAt != null;
       
       // 수정: 알림 대상자가 읽음 상태만 변경 가능
       allow update: if isAuthenticated() 
@@ -265,16 +282,16 @@ service cloud.firestore {
       
       // 생성: 인증된 사용자만 가능 (신고 제출)
       allow create: if isAuthenticated()
-        && request.resource.data.reporterUid == request.auth.uid
-        && request.resource.data.targetType is string
-        && request.resource.data.targetId is string
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.contentType is string
+        && request.resource.data.contentId is string
         && request.resource.data.reason is string
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt is timestamp;
       
       // 수정: 관리자만 가능 (신고 처리)
       allow update: if isAdmin()
-        && isSafeFieldUpdate(['status', 'adminNote', 'processedAt', 'processedBy']);
+        && isSafeFieldUpdate(['status', 'adminNote', 'processedAt', 'processedBy', 'autoProcessed']);
       
       // 삭제: 관리자만 가능
       allow delete: if isAdmin();
@@ -348,6 +365,44 @@ service cloud.firestore {
       
       // 삭제: 본인 또는 관리자만 가능
       allow delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // 검색 통계 컬렉션 규칙 - 새로 추가
+    match /searchStats/{statId} {
+      // 읽기: 관리자만 가능 (통계 분석용)
+      allow read: if isAdmin();
+      
+      // 생성: 시스템에서 자동 생성 (검색 통계 수집)
+      allow create: if isAuthenticated()
+        && request.resource.data.searchTerm is string
+        && request.resource.data.searchCount is number
+        && request.resource.data.resultCount is number
+        && request.resource.data.timestamp is timestamp
+        && request.resource.data.userUid == request.auth.uid;
+      
+      // 수정: 검색 횟수 증가만 허용
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchCount', 'lastSearched'])
+        && request.resource.data.searchCount >= resource.data.searchCount;
+      
+      // 삭제: 관리자만 가능
+      allow delete: if isAdmin();
+    }
+
+    // 사용자 검색 히스토리 컬렉션 규칙 - 새로 추가
+    match /userSearchHistory/{userId} {
+      // 읽기: 본인만 가능
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // 생성/수정: 본인만 가능
+      allow create, update: if isAuthenticated() 
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.searchHistory is list
+        && request.resource.data.searchHistory.size() <= 100; // 최대 100개 히스토리
+      
+      // 삭제: 본인만 가능
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
     }
   }
 }

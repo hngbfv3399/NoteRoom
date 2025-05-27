@@ -97,12 +97,12 @@ export const createCommentNotification = async (noteId, noteAuthorId, commentAut
     // 안전한 Firestore 작업으로 사용자 정보 가져오기
     const [commentAuthorData, noteData] = await Promise.all([
       safeFirestoreOperation(async () => {
-        const doc = await getDoc(doc(db, 'users', commentAuthorId));
-        return doc.data();
+        const userDoc = await getDoc(doc(db, 'users', commentAuthorId));
+        return userDoc.data();
       }),
       safeFirestoreOperation(async () => {
-        const doc = await getDoc(doc(db, 'notes', noteId));
-        return doc.data();
+        const noteDoc = await getDoc(doc(db, 'notes', noteId));
+        return noteDoc.data();
       })
     ]);
 
@@ -300,8 +300,45 @@ export const markNotificationAsRead = async (notificationId) => {
   }
 };
 
-// 모든 알림 읽음 처리
+// 모든 알림 삭제 (읽음 처리 대신)
 export const markAllNotificationsAsRead = async (userId) => {
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('targetUser', '==', userId)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) {
+      showToastNotification('삭제할 알림이 없습니다.', 'info');
+      return { success: true, deletedCount: 0 };
+    }
+    
+    // 모든 알림 삭제
+    const deletePromises = snapshot.docs.map(doc => 
+      safeFirestoreOperation(async () => {
+        const { deleteDoc } = await import('firebase/firestore');
+        return await deleteDoc(doc.ref);
+      })
+    );
+    
+    await Promise.all(deletePromises);
+    
+    // 토스트 알림 표시
+    showToastNotification(`${snapshot.size}개의 알림을 모두 삭제했습니다.`, 'success');
+    
+    return { success: true, deletedCount: snapshot.size };
+  } catch (error) {
+    console.error('모든 알림 삭제 실패:', error);
+    showToastNotification('알림 삭제에 실패했습니다.', 'error');
+    throw error;
+  }
+};
+
+// 읽지 않은 알림만 삭제
+export const deleteUnreadNotifications = async (userId) => {
   try {
     const notificationsRef = collection(db, 'notifications');
     const q = query(
@@ -311,22 +348,29 @@ export const markAllNotificationsAsRead = async (userId) => {
     );
     
     const snapshot = await getDocs(q);
-    const updatePromises = snapshot.docs.map(doc => 
-      updateDoc(doc.ref, {
-        isRead: true,
-        readAt: serverTimestamp()
+    
+    if (snapshot.empty) {
+      showToastNotification('삭제할 읽지 않은 알림이 없습니다.', 'info');
+      return { success: true, deletedCount: 0 };
+    }
+    
+    // 읽지 않은 알림만 삭제
+    const deletePromises = snapshot.docs.map(doc => 
+      safeFirestoreOperation(async () => {
+        const { deleteDoc } = await import('firebase/firestore');
+        return await deleteDoc(doc.ref);
       })
     );
     
-    await Promise.all(updatePromises);
+    await Promise.all(deletePromises);
     
     // 토스트 알림 표시
-    showToastNotification('모든 알림을 읽음 처리했습니다.', 'success');
+    showToastNotification(`${snapshot.size}개의 읽지 않은 알림을 삭제했습니다.`, 'success');
     
-    return { success: true };
+    return { success: true, deletedCount: snapshot.size };
   } catch (error) {
-    console.error('모든 알림 읽음 처리 실패:', error);
-    showToastNotification('알림 읽음 처리에 실패했습니다.', 'error');
+    console.error('읽지 않은 알림 삭제 실패:', error);
+    showToastNotification('읽지 않은 알림 삭제에 실패했습니다.', 'error');
     throw error;
   }
 };

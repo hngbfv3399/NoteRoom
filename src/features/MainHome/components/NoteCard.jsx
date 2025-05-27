@@ -67,7 +67,7 @@ const NoteCard = memo(({ note, onNoteClick }) => {
               return;
             }
           } catch (imageError) {
-            console.log('이미지 공유 실패, 텍스트만 공유:', imageError);
+            console.log('이미지 공유 실패,텍스트만 공유:', imageError);
             // 이미지 공유 실패 시 텍스트만 공유
           }
         }

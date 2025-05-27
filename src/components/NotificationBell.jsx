@@ -68,7 +68,6 @@ function NotificationBell() {
       // 인덱스 빌드 중인 경우 사용자에게 알림
       if (error.code === 'failed-precondition' || error.message.includes('index is currently building')) {
         // 토스트는 이미 notificationUtils에서 표시되므로 여기서는 조용히 처리
-        console.log('인덱스 빌드 중 - 알림 로딩 대기');
       }
     } finally {
       setIsLoading(false);
@@ -123,18 +122,19 @@ function NotificationBell() {
     }
   };
 
-  // 모든 알림 읽음 처리
+  // 모든 알림 삭제
   const handleMarkAllAsRead = async () => {
-    if (unreadCount === 0) return;
+    if (notifications.length === 0) return;
 
     try {
-      await markAllNotificationsAsRead(currentUser.uid);
-      setNotifications(prev => 
-        prev.map(n => ({ ...n, isRead: true }))
-      );
-      setUnreadCount(0);
+      const result = await markAllNotificationsAsRead(currentUser.uid);
+      if (result.success) {
+        // 알림 목록 비우기
+        setNotifications([]);
+        setUnreadCount(0);
+      }
     } catch (error) {
-      console.error('모든 알림 읽음 처리 실패:', error);
+      console.error('모든 알림 삭제 실패:', error);
     }
   };
 
@@ -241,18 +241,18 @@ function NotificationBell() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-lg">알림</h3>
-                  {unreadCount > 0 && (
+                  {notifications.length > 0 && (
                     <p className="text-sm text-gray-500 mt-1">
-                      {unreadCount}개의 읽지 않은 알림
+                      총 {notifications.length}개의 알림 (읽지 않음: {unreadCount}개)
                     </p>
                   )}
                 </div>
-                {unreadCount > 0 && (
+                {notifications.length > 0 && (
                   <button
                     onClick={handleMarkAllAsRead}
-                    className={`text-sm ${currentTheme?.linkColor || 'text-blue-600'} hover:underline`}
+                    className={`text-sm ${currentTheme?.linkColor || 'text-red-600'} hover:underline`}
                   >
-                    모두 읽음
+                    모두 삭제
                   </button>
                 )}
               </div>

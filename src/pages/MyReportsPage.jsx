@@ -36,14 +36,19 @@ function MyReportsPage() {
 
   // 신고 내역 로드
   const loadReports = async () => {
-    if (!user) return;
+    if (!user?.uid) {
+      console.log('❌ [MyReports] 사용자 정보 없음:', user);
+      return;
+    }
     
+    console.log('📊 [MyReports] 신고 내역 로드 시작:', user.uid);
     setLoading(true);
     try {
       const userReports = await getUserReports(user.uid);
+      console.log('✅ [MyReports] 신고 내역 로드 완료:', userReports.length);
       setReports(userReports);
     } catch (error) {
-      console.error('신고 내역 로드 실패:', error);
+      console.error('❌ [MyReports] 신고 내역 로드 실패:', error);
     } finally {
       setLoading(false);
     }
@@ -101,16 +106,27 @@ function MyReportsPage() {
 
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
-    loadReports();
-  }, [user]);
+    console.log('🔄 [MyReports] useEffect 실행:', { user: !!user, uid: user?.uid });
+    if (user?.uid) {
+      loadReports();
+    }
+  }, [user?.uid]); // user.uid가 변경될 때만 실행
 
-  if (!user) {
+  // 로그인 상태 확인 개선
+  if (!user?.uid) {
+    console.log('🚫 [MyReports] 로그인 필요 - 사용자 상태:', user);
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <FiAlertTriangle className="mx-auto text-4xl text-gray-400 mb-4" />
           <h2 className="text-xl font-semibold text-gray-600 mb-2">로그인이 필요합니다</h2>
           <p className="text-gray-500">신고 내역을 확인하려면 로그인해주세요.</p>
+          <button
+            onClick={() => navigate('/auth/login')}
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            로그인하기
+          </button>
         </div>
       </div>
     );

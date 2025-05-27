@@ -9,7 +9,7 @@
  * NOTE: 페이지 이동 방식으로 변경하여 공유 기능 지원
  * PERFORMANCE: 스크롤 감지로 자동 로드하되 초기 로드는 4개로 제한
  */
-import React, { useImperativeHandle, forwardRef, useEffect, useRef } from "react";
+import React, { useImperativeHandle, forwardRef, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { useNotesInfinite } from "@/hooks/useNotesInfinite";
 import { useNoteInteraction } from "@/hooks/useNoteInteraction";
@@ -24,9 +24,9 @@ import LoadingState from "./components/LoadingState";
 const MainContent = forwardRef((props, ref) => {
   const observerRef = useRef();
   
-  // 현재 테마 가져오기
+  // 현재 테마 가져오기 (메모이제이션)
   const { current, themes } = useSelector((state) => state.theme);
-  const currentTheme = themes[current];
+  const currentTheme = useMemo(() => themes[current], [themes, current]);
 
   // 무한 스크롤 노트 데이터 관리 - 초기 4개만 로드
   const {
@@ -39,14 +39,17 @@ const MainContent = forwardRef((props, ref) => {
     refetch,
   } = useNotesInfinite(4); // 페이지당 4개로 설정
 
-  // 노트 상호작용 관리 (클릭 → 페이지 이동으로 공유 가능)
+  // 노트 상호작용 관리 (메모이제이션)
   const { handleNoteClick } = useNoteInteraction({ 
-    useModal: false,  // 페이지 이동 사용 (공유 가능한 URL)
+    useModal: false,
     enableViewIncrement: true 
   });
 
-  // 모든 페이지의 노트를 평탄화
-  const allNotes = data?.pages.flatMap((page) => page.notes) ?? [];
+  // 모든 페이지의 노트를 평탄화 (메모이제이션)
+  const allNotes = useMemo(() => 
+    data?.pages.flatMap((page) => page.notes) ?? [], 
+    [data?.pages]
+  );
 
   // Intersection Observer를 사용한 무한 스크롤
   useEffect(() => {
@@ -69,10 +72,10 @@ const MainContent = forwardRef((props, ref) => {
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  // 외부에서 호출할 수 있는 새로고침 함수
-  const refreshData = async () => {
+  // 외부에서 호출할 수 있는 새로고침 함수 (메모이제이션)
+  const refreshData = useCallback(async () => {
     await refetch();
-  };
+  }, [refetch]);
 
   // ref를 통해 외부에서 refreshData 함수에 접근할 수 있도록 설정
   useImperativeHandle(ref, () => ({

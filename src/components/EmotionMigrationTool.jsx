@@ -90,7 +90,6 @@ function EmotionMigrationTool() {
       if (Object.keys(updateData).length > 0) {
         await updateDoc(userDocRef, updateData);
         setHasEmotionData(true);
-        console.log('감정 추적 데이터 추가 완료');
       } else {
         setHasEmotionData(true);
       }

@@ -11,6 +11,7 @@ import AnnouncementPage from "@/pages/AnnouncementPage";
 import AdminAnnouncementPage from "@/pages/AdminAnnouncementPage";
 import AdminPage from "@/pages/AdminPage";
 import MyReportsPage from "@/pages/MyReportsPage";
+import TestPage from "@/pages/TestPage";
 
 import NotFound from "@/pages/NotFound";
 import { auth } from "@/services/firebase";
@@ -125,6 +126,11 @@ function AppRouter() {
       <Route path={ROUTES.MY_REPORTS} element={
         <ProtectedRoute>
           <MyReportsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/test" element={
+        <ProtectedRoute>
+          <TestPage />
         </ProtectedRoute>
       } />
 

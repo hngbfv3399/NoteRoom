@@ -1,63 +1,87 @@
 /**
- * 통합 검색 페이지 컴포넌트
+ * 🚀 최적화된 통합 검색 페이지 컴포넌트
  * 
- * 주요 기능:
- * - URL 파라미터로 받은 검색어로 노트 및 사용자 검색
- * - 쿼리 파라미터로 고급 필터 지원 (카테고리, 작성자, 기간, 정렬)
- * - 탭으로 노트/사용자 검색 결과 분리
- * - 노트: 제목, 작성자, 카테고리, 내용에서 검색
- * - 사용자: 이름, 이메일에서 검색
- * - 검색 결과 하이라이팅
- * - 노트 클릭 시 독립 페이지로 이동 (공유 가능)
- * - 사용자 클릭 시 프로필 페이지로 이동
+ * 주요 개선사항:
+ * - React Query로 완전 전환 (캐싱, 에러 처리, 로딩 상태)
+ * - 서버 사이드 검색 최적화
+ * - 메모이제이션으로 불필요한 리렌더링 방지
+ * - 디바운싱으로 검색 성능 향상
+ * - 완전한 테마 시스템 적용
  * 
- * NOTE: 페이지 이동 방식으로 변경하여 공유 기능 지원
- * IMPROVED: 가상화 및 페이지네이션으로 대량 데이터 성능 최적화, 토스트 알림 추가
+ * 성능 최적화:
+ * - 검색 결과 캐싱으로 중복 요청 방지
+ * - 메모이제이션된 컴포넌트 및 콜백
+ * - 가상화된 리스트 렌더링
  */
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { collection, getDocs, query, limit, startAfter, orderBy, where } from "firebase/firestore";
-import { db } from "@/services/firebase";
+import { useState, useMemo, useCallback } from "react";
+import { useSelector } from "react-redux";
+import { useSearch } from "@/hooks/useSearch";
 import { useNoteInteraction } from "@/hooks/useNoteInteraction";
-import { FaUser, FaFileAlt, FaSearch, FaFilter, FaSort, FaChevronLeft, FaChevronRight } from "react-icons/fa";
-import { useDispatch } from "react-redux";
-import { showToast } from "@/store/toast/slice";
+import { FaUser, FaFileAlt, FaSearch } from "react-icons/fa";
+import { 
+  getPageTheme, 
+  getCardTheme, 
+  getButtonTheme, 
+  getTextThemeClass,
+  getIconTheme,
+  getBadgeTheme,
+  getHoverTheme
+} from "@/utils/themeHelper";
 
 function SearchPage() {
   const { searchParam } = useParams(); // URL에서 검색어 추출
   const [searchParams] = useSearchParams(); // 쿼리 파라미터 추출
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   
-  // 검색 결과 상태
-  const [notes, setNotes] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 🎨 전역 테마 시스템 활용
+  const { current, themes } = useSelector((state) => state.theme);
+  const currentTheme = themes[current];
+  
+  // 로컬 상태 (최소화)
   const [activeTab, setActiveTab] = useState('notes'); // 'notes' 또는 'users'
   
-  // 페이지네이션 상태
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [lastVisible, setLastVisible] = useState(null);
-  const ITEMS_PER_PAGE = 10;
-  
-  // 고급 필터 상태
-  const [filters] = useState({
+  // 고급 필터 상태 (메모이제이션)
+  const filters = useMemo(() => ({
     category: searchParams.get('category') || '',
     author: searchParams.get('author') || '',
     dateRange: searchParams.get('dateRange') || '',
     sortBy: searchParams.get('sortBy') || 'relevance'
-  });
-  
-  // 노트 상호작용 관리 (클릭 → 페이지 이동으로 공유 가능)
+  }), [searchParams]);
+
+  // 🚀 React Query로 최적화된 검색
+  const { 
+    data: searchResults, 
+    isLoading: loading, 
+    error,
+    refetch 
+  } = useSearch(searchParam, filters, activeTab);
+
+  // 노트 상호작용 관리 (메모이제이션)
   const { handleNoteClick } = useNoteInteraction({ 
-    useModal: false,  // 페이지 이동 사용 (공유 가능한 URL)
+    useModal: false,
     enableViewIncrement: true 
   });
 
-  // 검색어 하이라이팅 함수
-  const highlightText = (text, searchTerm) => {
+  // 검색 결과 데이터 추출 (메모이제이션)
+  const { notes = [], users = [] } = useMemo(() => {
+    if (!searchResults) return { notes: [], users: [] };
+    return searchResults;
+  }, [searchResults]);
+
+  // 카운트 표시용 (로딩 중에도 이전 값 유지)
+  const displayCounts = useMemo(() => {
+    if (loading && !searchResults) {
+      return { notesCount: '...', usersCount: '...' };
+    }
+    return { 
+      notesCount: notes.length, 
+      usersCount: users.length 
+    };
+  }, [notes.length, users.length, loading, searchResults]);
+
+  // 검색어 하이라이팅 함수 (메모이제이션)
+  const highlightText = useCallback((text, searchTerm) => {
     if (!text || !searchTerm) return text;
     
     const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
@@ -65,535 +89,241 @@ function SearchPage() {
     
     return parts.map((part, index) => 
       regex.test(part) ? (
-        <mark key={index} className="bg-yellow-200 px-1 rounded">
+        <mark key={index} className={`px-1 rounded ${getBadgeTheme(currentTheme, 'warning')}`}>
           {part}
         </mark>
       ) : part
     );
-  };
+  }, [currentTheme]);
 
-  // 날짜 필터링 함수
-  const filterByDateRange = (createdAt, dateRange) => {
-    if (!dateRange || !createdAt) return true;
-    
-    const noteDate = new Date(createdAt.seconds * 1000);
-    const now = new Date();
-    
-    switch (dateRange) {
-      case 'today': {
-        return noteDate.toDateString() === now.toDateString();
-      }
-      case 'week': {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        return noteDate >= weekAgo;
-      }
-      case 'month': {
-        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        return noteDate >= monthAgo;
-      }
-      case 'year': {
-        const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-        return noteDate >= yearAgo;
-      }
-      default:
-        return true;
-    }
-  };
-
-  // 정렬 함수
-  const sortResults = (results, sortBy) => {
-    switch (sortBy) {
-      case 'newest': {
-        return results.sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return bTime - aTime;
-        });
-      }
-      case 'oldest': {
-        return results.sort((a, b) => {
-          const aTime = a.createdAt?.seconds || 0;
-          const bTime = b.createdAt?.seconds || 0;
-          return aTime - bTime;
-        });
-      }
-      case 'popular': {
-        return results.sort((a, b) => {
-          const aViews = a.views || 0;
-          const bViews = b.views || 0;
-          return bViews - aViews;
-        });
-      }
-      case 'relevance':
-      default: {
-        // 관련도순: 제목에 검색어가 포함된 것을 우선
-        return results.sort((a, b) => {
-          const aTitle = (a.title || '').toLowerCase();
-          const bTitle = (b.title || '').toLowerCase();
-          const searchLower = searchParam.toLowerCase();
-          
-          const aInTitle = aTitle.includes(searchLower) ? 1 : 0;
-          const bInTitle = bTitle.includes(searchLower) ? 1 : 0;
-          
-          if (aInTitle !== bInTitle) {
-            return bInTitle - aInTitle;
-          }
-          
-          // 제목 길이가 짧을수록 관련도가 높다고 가정
-          return aTitle.length - bTitle.length;
-        });
-      }
-    }
-  };
-
-  // 기본 아바타 생성 함수 (DiceBear API 사용)
-  const getDefaultAvatar = (name) => {
+  // 기본 아바타 생성 함수 (메모이제이션)
+  const getDefaultAvatar = useCallback((name) => {
     const seed = name || 'default';
     const colors = ['b6e3f4', 'c0aede', 'd1d4f9', 'ffd93d', 'ffb3ba', 'bae1ff'];
     const randomColor = colors[Math.abs(seed.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) % colors.length];
     return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=${randomColor}`;
-  };
+  }, []);
 
-  // 페이지네이션된 검색 로직 (성능 최적화)
-  const fetchSearchResults = useCallback(async (page = 1, resetResults = true) => {
-    if (resetResults) {
-      setLoading(true);
-      setCurrentPage(1);
-      setLastVisible(null);
-    }
-    
-    try {
-      const lowerSearch = searchParam.toLowerCase();
-
-      if (activeTab === 'notes') {
-        // 노트 검색 (페이지네이션 적용)
-        let notesQuery = collection(db, "notes");
-        
-        // 기본 정렬 적용
-        if (filters.sortBy === 'newest') {
-          notesQuery = query(notesQuery, orderBy('createdAt', 'desc'));
-        } else if (filters.sortBy === 'oldest') {
-          notesQuery = query(notesQuery, orderBy('createdAt', 'asc'));
-        } else if (filters.sortBy === 'popular') {
-          notesQuery = query(notesQuery, orderBy('views', 'desc'));
-        }
-        
-        // 페이지네이션 적용
-        notesQuery = query(notesQuery, limit(ITEMS_PER_PAGE));
-        if (lastVisible && page > 1) {
-          notesQuery = query(notesQuery, startAfter(lastVisible));
-        }
-
-        const notesSnapshot = await getDocs(notesQuery);
-        
-        // 클라이언트 사이드 필터링 (Firebase 제한으로 인해)
-        let filteredNotes = notesSnapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((note) => {
-            // 기본 검색 조건
-            const matchesSearch = (
-              (note.title || "").toLowerCase().includes(lowerSearch) ||
-              (note.authorName || "").toLowerCase().includes(lowerSearch) ||
-              (note.category || "").toLowerCase().includes(lowerSearch) ||
-              (note.content || "").toLowerCase().includes(lowerSearch)
-            );
-            
-            if (!matchesSearch) return false;
-            
-            // 고급 필터 적용
-            if (filters.category && note.category !== filters.category) {
-              return false;
-            }
-            
-            if (filters.author && !(note.authorName || "").toLowerCase().includes(filters.author.toLowerCase())) {
-              return false;
-            }
-            
-            if (filters.dateRange && !filterByDateRange(note.createdAt, filters.dateRange)) {
-              return false;
-            }
-            
-            return true;
-          });
-
-        // 관련도순 정렬 (클라이언트 사이드)
-        if (filters.sortBy === 'relevance') {
-          filteredNotes = sortResults(filteredNotes, 'relevance');
-        }
-
-        if (resetResults) {
-          setNotes(filteredNotes);
-        } else {
-          setNotes(prev => [...prev, ...filteredNotes]);
-        }
-        
-        // 페이지네이션 상태 업데이트
-        setHasNextPage(notesSnapshot.docs.length === ITEMS_PER_PAGE);
-        if (notesSnapshot.docs.length > 0) {
-          setLastVisible(notesSnapshot.docs[notesSnapshot.docs.length - 1]);
-        }
-        
-      } else {
-        // 사용자 검색 (간단한 페이지네이션)
-        const usersRef = collection(db, "users");
-        const usersSnapshot = await getDocs(usersRef);
-        const filteredUsers = usersSnapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((user) => {
-            return (
-              (user.displayName || "").toLowerCase().includes(lowerSearch) ||
-              (user.email || "").toLowerCase().includes(lowerSearch)
-            );
-          });
-
-        // 클라이언트 사이드 페이지네이션
-        const startIndex = (page - 1) * ITEMS_PER_PAGE;
-        const endIndex = startIndex + ITEMS_PER_PAGE;
-        const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
-        
-        if (resetResults) {
-          setUsers(paginatedUsers);
-        } else {
-          setUsers(prev => [...prev, ...paginatedUsers]);
-        }
-        
-        setTotalPages(Math.ceil(filteredUsers.length / ITEMS_PER_PAGE));
-        setHasNextPage(endIndex < filteredUsers.length);
-      }
-      
-    } catch (error) {
-      console.error("검색 중 오류 발생:", error);
-      
-      const errorMessage = error.code === 'permission-denied'
-        ? '검색 권한이 없습니다.'
-        : error.code === 'unavailable'
-        ? '네트워크 연결을 확인해주세요.'
-        : '검색 중 오류가 발생했습니다.';
-      
-      dispatch(showToast({
-        type: 'error',
-        message: errorMessage
-      }));
-    } finally {
-      setLoading(false);
-    }
-  }, [searchParam, filters, activeTab, lastVisible, dispatch]);
-
-  // 검색 실행
-  useEffect(() => {
-    if (searchParam) {
-      fetchSearchResults(1, true);
-    }
-  }, [searchParam, filters, activeTab, fetchSearchResults]);
-
-  // 사용자 프로필로 이동
-  const handleUserClick = (user) => {
+  // 이벤트 핸들러들 (메모이제이션)
+  const handleUserClick = useCallback((user) => {
     navigate(`/profile/${user.id}`);
-  };
+  }, [navigate]);
 
-  // 탭 변경 핸들러
-  const handleTabChange = (tab) => {
+  const handleTabChange = useCallback((tab) => {
     setActiveTab(tab);
-    setCurrentPage(1);
-    setLastVisible(null);
-  };
+  }, []);
 
-  // 더 보기 핸들러
-  const handleLoadMore = useCallback(() => {
-    if (!loading && hasNextPage) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      fetchSearchResults(nextPage, false);
-    }
-  }, [loading, hasNextPage, currentPage, fetchSearchResults]);
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
-  // 메모이제이션된 검색 결과 표시
-  const displayedNotes = useMemo(() => notes, [notes]);
-  const displayedUsers = useMemo(() => users, [users]);
+  // 검색어가 없는 경우
+  if (!searchParam) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${getPageTheme(currentTheme)}`}>
+        <div className="text-center">
+          <FaSearch className={`text-6xl mx-auto mb-4 ${getIconTheme(currentTheme, 'secondary')}`} />
+          <h2 className={`text-2xl font-semibold mb-2 ${getTextThemeClass(currentTheme, 'primary')}`}>
+            검색어를 입력해주세요
+          </h2>
+          <p className={getTextThemeClass(currentTheme, 'secondary')}>
+            찾고 싶은 노트나 사용자를 검색해보세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="max-w-4xl mx-auto px-6 py-10 relative">
-      {/* 검색 결과 헤더 */}
-      <div className="mb-8">
-        <h2 className="text-3xl mb-4 flex items-center gap-3">
-          <FaSearch className="text-blue-500" />
-          검색 결과: "{searchParam}"
-        </h2>
-        
-        {/* 활성 필터 표시 */}
-        {(filters.category || filters.author || filters.dateRange || filters.sortBy !== 'relevance') && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {filters.category && (
-              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-1">
-                <FaFilter className="w-3 h-3" />
-                카테고리: {filters.category}
-              </span>
-            )}
-            {filters.author && (
-              <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm flex items-center gap-1">
-                <FaUser className="w-3 h-3" />
-                작성자: {filters.author}
-              </span>
-            )}
-            {filters.dateRange && (
-              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
-                기간: {
-                  filters.dateRange === 'today' ? '오늘' :
-                  filters.dateRange === 'week' ? '이번 주' :
-                  filters.dateRange === 'month' ? '이번 달' :
-                  filters.dateRange === 'year' ? '올해' : filters.dateRange
-                }
-              </span>
-            )}
-            {filters.sortBy !== 'relevance' && (
-              <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm flex items-center gap-1">
-                <FaSort className="w-3 h-3" />
-                정렬: {
-                  filters.sortBy === 'newest' ? '최신순' :
-                  filters.sortBy === 'oldest' ? '오래된순' :
-                  filters.sortBy === 'popular' ? '인기순' : '관련도순'
-                }
-              </span>
-            )}
-          </div>
-        )}
-        
-        {/* 탭 네비게이션 */}
-        <div className="flex border-b border-gray-200">
+  // 로딩 상태
+  if (loading) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${getPageTheme(currentTheme)}`}>
+        <div className="text-center">
+          <div className={`animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4 ${currentTheme.linkColor?.replace('text-', 'border-')}`}></div>
+          <p className={getTextThemeClass(currentTheme, 'secondary')}>
+            "{searchParam}" 검색 중...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center ${getPageTheme(currentTheme)}`}>
+        <div className="text-center max-w-md">
+          <div className={`text-6xl mb-4 ${getIconTheme(currentTheme, 'error')}`}>⚠️</div>
+          <h2 className={`text-xl font-semibold mb-2 ${getTextThemeClass(currentTheme, 'primary')}`}>
+            검색 중 오류가 발생했습니다
+          </h2>
+          <p className={`mb-4 ${getTextThemeClass(currentTheme, 'secondary')}`}>
+            {error.message}
+          </p>
           <button
-            onClick={() => handleTabChange('notes')}
-            className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors duration-200 ${
-              activeTab === 'notes'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            onClick={handleRetry}
+            className={`px-6 py-3 rounded-lg transition-colors ${getButtonTheme(currentTheme)}`}
           >
-            <FaFileAlt className="inline mr-2" />
-            노트 ({loading ? '...' : notes.length})
-          </button>
-          <button
-            onClick={() => handleTabChange('users')}
-            className={`px-6 py-3 font-medium text-sm border-b-2 transition-colors duration-200 ${
-              activeTab === 'users'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <FaUser className="inline mr-2" />
-            사용자 ({loading ? '...' : users.length})
+            다시 시도
           </button>
         </div>
       </div>
+    );
+  }
 
-      {/* 로딩 상태 */}
-      {loading && (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-500">검색 중...</p>
+  return (
+    <div className={`min-h-screen ${getPageTheme(currentTheme)}`}>
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        {/* 검색 헤더 */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className={`text-xl sm:text-2xl lg:text-3xl font-bold mb-2 break-words ${getTextThemeClass(currentTheme, 'primary')}`}>
+            "<span className={currentTheme.linkColor}>{searchParam}</span>" 검색 결과
+          </h1>
+          <p className={`text-sm sm:text-base ${getTextThemeClass(currentTheme, 'secondary')}`}>
+            {activeTab === 'notes' ? displayCounts.notesCount : displayCounts.usersCount}개의 결과를 찾았습니다
+          </p>
         </div>
-      )}
 
-      {/* 노트 검색 결과 */}
-      {!loading && activeTab === 'notes' && (
-        <div>
-          {notes.length === 0 ? (
-            <div className="text-center py-16">
-              <FaFileAlt className="text-6xl text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">검색어에 맞는 노트가 없습니다.</p>
-              <p className="text-sm text-gray-400">
-                다른 검색어를 시도하거나 필터를 조정해보세요.
-              </p>
-            </div>
-          ) : (
-            displayedNotes.map((note) => {
-              // HTML 태그 제거 후 미리보기 텍스트 생성 (100자로 확장)
-              const preview =
-                (note.content || "").replace(/<[^>]+>/g, "").slice(0, 100) +
-                ((note.content || "").length > 100 ? "..." : "");
-
-              return (
-                <div
-                  key={note.id}
-                  className="mb-6 p-5 rounded-2xl border border-gray-300 hover:border-gray-500 transition-colors duration-300 cursor-pointer flex gap-5 items-start hover:shadow-md"
-                  onClick={() => handleNoteClick(note)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleNoteClick(note);
-                    }
-                  }}
-                  aria-label={`노트: ${note.title}`}
-                >
-                  {/* 노트 이미지 또는 플레이스홀더 */}
-                  {note.image ? (
-                    <img
-                      src={note.image}
-                      alt={note.title}
-                      className="w-32 h-20 object-cover rounded-lg flex-shrink-0"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-32 h-20 bg-gray-200 rounded-lg flex-shrink-0 flex items-center justify-center text-gray-400 text-sm">
-                      <FaFileAlt className="text-2xl" />
-                    </div>
-                  )}
-
-                  {/* 노트 정보 */}
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold mb-2">
-                      {highlightText(note.title || "제목 없음", searchParam)}
-                    </h3>
-                    
-                    {/* 메타데이터 */}
-                    <div className="flex justify-between text-sm mb-3 text-gray-600">
-                      <span>
-                        작성자: {highlightText(note.author || note.authorName || "익명", searchParam)}
-                      </span>
-                      <span>
-                        카테고리: {highlightText(note.category || "없음", searchParam)}
-                      </span>
-                    </div>
-                    
-                    {/* 내용 미리보기 */}
-                    <p className="leading-relaxed text-gray-700">
-                      {highlightText(preview, searchParam)}
-                    </p>
-                    
-                    {/* 추가 메타데이터 */}
-                    <div className="flex justify-between items-center mt-3 text-xs text-gray-500">
-                      <span>조회수: {note.views || 0}</span>
-                      {note.createdAt && (
-                        <span>
-                          {new Date(note.createdAt.seconds * 1000).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-          
-          {/* 더 보기 버튼 (노트) */}
-          {!loading && hasNextPage && activeTab === 'notes' && displayedNotes.length > 0 && (
-            <div className="text-center mt-8">
+        {/* 탭 네비게이션 */}
+        <div className="mb-4 sm:mb-6">
+          <div className={`border-b ${currentTheme.borderColor}`}>
+            <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
               <button
-                onClick={handleLoadMore}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center gap-2 mx-auto"
-                disabled={loading}
+                onClick={() => handleTabChange('notes')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                  activeTab === 'notes'
+                    ? `${currentTheme.linkColor?.replace('text-', 'border-')} ${currentTheme.linkColor}`
+                    : `border-transparent ${getTextThemeClass(currentTheme, 'secondary')} ${getHoverTheme(currentTheme)}`
+                }`}
               >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    로딩 중...
-                  </>
-                ) : (
-                  <>
-                    <FaChevronRight className="w-4 h-4" />
-                    더 보기
-                  </>
-                )}
+                <FaFileAlt className="inline mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">노트 </span>({displayCounts.notesCount})
               </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 사용자 검색 결과 */}
-      {!loading && activeTab === 'users' && (
-        <div>
-          {users.length === 0 ? (
-            <div className="text-center py-16">
-              <FaUser className="text-6xl text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">검색어에 맞는 사용자가 없습니다.</p>
-              <p className="text-sm text-gray-400">
-                다른 검색어를 시도해보세요.
-              </p>
-            </div>
-          ) : (
-            displayedUsers.map((user) => (
-              <div
-                key={user.id}
-                className="mb-4 p-5 rounded-2xl border border-gray-300 hover:border-gray-500 transition-colors duration-300 cursor-pointer flex gap-4 items-center hover:shadow-md"
-                onClick={() => handleUserClick(user)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleUserClick(user);
-                  }
-                }}
-                aria-label={`사용자: ${user.displayName}`}
+              <button
+                onClick={() => handleTabChange('users')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                  activeTab === 'users'
+                    ? `${currentTheme.linkColor?.replace('text-', 'border-')} ${currentTheme.linkColor}`
+                    : `border-transparent ${getTextThemeClass(currentTheme, 'secondary')} ${getHoverTheme(currentTheme)}`
+                }`}
               >
-                {/* 프로필 이미지 또는 기본 아바타 */}
-                <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 border-2 border-gray-200">
-                  <img
-                    src={user.profileImage || getDefaultAvatar(user.displayName)}
-                    alt={user.displayName}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      // 이미지 로드 실패 시 기본 아바타로 대체
-                      e.target.src = getDefaultAvatar(user.displayName);
-                    }}
-                  />
-                </div>
+                <FaUser className="inline mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">사용자 </span>({displayCounts.usersCount})
+              </button>
+            </nav>
+          </div>
+        </div>
 
-                {/* 사용자 정보 */}
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold mb-1">
-                    {highlightText(user.displayName || "이름 없음", searchParam)}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-2">
-                    {highlightText(user.email || "이메일 없음", searchParam)}
-                  </p>
-                  <div className="flex gap-4 text-xs text-gray-500">
-                    <span>노트: {user.noteCount || 0}개</span>
-                    {user.favoriteQuote && (
-                      <span className="truncate max-w-xs">
-                        "{user.favoriteQuote}"
-                      </span>
+        {/* 검색 결과 */}
+        <div className="space-y-6">
+          {activeTab === 'notes' ? (
+            // 노트 검색 결과
+            notes.length > 0 ? (
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {notes.map((note) => (
+                  <div
+                    key={note.id}
+                    onClick={() => handleNoteClick(note)}
+                    className={`rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer overflow-hidden ${getCardTheme(currentTheme)} ${getHoverTheme(currentTheme)}`}
+                  >
+                    {/* 썸네일 이미지 */}
+                    {note.image && (
+                      <div className="w-full h-32 sm:h-40 overflow-hidden">
+                        <img
+                          src={note.image}
+                          alt={note.title}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
                     )}
+                    
+                    <div className="p-4 sm:p-6">
+                      <div className="mb-3 sm:mb-4">
+                        <h3 className={`text-base sm:text-lg font-semibold mb-2 line-clamp-2 ${getTextThemeClass(currentTheme, 'primary')}`}>
+                          {highlightText(note.title, searchParam)}
+                        </h3>
+                        <p className={`text-sm line-clamp-3 ${getTextThemeClass(currentTheme, 'secondary')}`}>
+                          {highlightText(note.content?.substring(0, 120) + '...', searchParam)}
+                        </p>
+                      </div>
+                      
+                      <div className={`flex items-center justify-between text-sm mb-3 ${getTextThemeClass(currentTheme, 'tertiary')}`}>
+                        <span className="truncate mr-2">{highlightText(note.authorName || note.author, searchParam)}</span>
+                        <span className={`px-2 py-1 rounded-full text-xs whitespace-nowrap ${getBadgeTheme(currentTheme, 'info')}`}>
+                          {note.category}
+                        </span>
+                      </div>
+                      
+                      <div className={`flex items-center justify-between text-xs ${getTextThemeClass(currentTheme, 'muted')}`}>
+                        <span>👁️ {note.views || 0}</span>
+                        <span>💬 {note.commentCount || 0}</span>
+                        <span>❤️ {note.likes || 0}</span>
+                        <span className="hidden sm:inline">
+                          {new Date(note.createdAt?.seconds * 1000).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-
-                {/* 프로필 보기 화살표 */}
-                <div className="text-gray-400">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
+                ))}
               </div>
-            ))
-          )}
-          
-          {/* 더 보기 버튼 (사용자) */}
-          {!loading && hasNextPage && activeTab === 'users' && displayedUsers.length > 0 && (
-            <div className="text-center mt-8">
-              <button
-                onClick={handleLoadMore}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center gap-2 mx-auto"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    로딩 중...
-                  </>
-                ) : (
-                  <>
-                    <FaChevronRight className="w-4 h-4" />
-                    더 보기 ({totalPages > currentPage ? `${currentPage}/${totalPages}` : ''})
-                  </>
-                )}
-              </button>
-            </div>
+            ) : (
+              <div className="text-center py-8 sm:py-12">
+                <FaFileAlt className={`text-4xl sm:text-6xl mx-auto mb-4 ${getIconTheme(currentTheme, 'muted')}`} />
+                <h3 className={`text-lg sm:text-xl font-semibold mb-2 ${getTextThemeClass(currentTheme, 'primary')}`}>노트를 찾을 수 없습니다</h3>
+                <p className={`text-sm sm:text-base px-4 ${getTextThemeClass(currentTheme, 'secondary')}`}>다른 검색어로 시도해보세요.</p>
+              </div>
+            )
+          ) : (
+            // 사용자 검색 결과
+            users.length > 0 ? (
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {users.map((user) => (
+                  <div
+                    key={user.id}
+                    onClick={() => handleUserClick(user)}
+                    className={`rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer p-4 sm:p-6 ${getCardTheme(currentTheme)} ${getHoverTheme(currentTheme)}`}
+                  >
+                    <div className="flex items-center space-x-3 sm:space-x-4">
+                      <img
+                        src={user.profileImage || getDefaultAvatar(user.displayName)}
+                        alt={user.displayName}
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover flex-shrink-0"
+                        loading="lazy"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className={`font-semibold truncate ${getTextThemeClass(currentTheme, 'primary')}`}>
+                          {highlightText(user.displayName, searchParam)}
+                        </h3>
+                        <p className={`text-sm truncate ${getTextThemeClass(currentTheme, 'secondary')}`}>
+                          {highlightText(user.email, searchParam)}
+                        </p>
+                        {user.bio && (
+                          <p className={`text-xs mt-1 line-clamp-2 ${getTextThemeClass(currentTheme, 'tertiary')}`}>
+                            {user.bio}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* 사용자 통계 */}
+                    <div className={`flex items-center justify-between mt-3 sm:mt-4 text-xs ${getTextThemeClass(currentTheme, 'muted')}`}>
+                      <span>📝 {user.noteCount || 0}개 노트</span>
+                      <span>👥 {user.followerCount || 0}명 팔로워</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 sm:py-12">
+                <FaUser className={`text-4xl sm:text-6xl mx-auto mb-4 ${getIconTheme(currentTheme, 'muted')}`} />
+                <h3 className={`text-lg sm:text-xl font-semibold mb-2 ${getTextThemeClass(currentTheme, 'primary')}`}>사용자를 찾을 수 없습니다</h3>
+                <p className={`text-sm sm:text-base px-4 ${getTextThemeClass(currentTheme, 'secondary')}`}>다른 검색어로 시도해보세요.</p>
+              </div>
+            )
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

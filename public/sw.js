@@ -100,21 +100,18 @@ registerRoute(
 
 // Service Worker 설치
 self.addEventListener('install', () => {
-  console.log('Service Worker 설치 중...');
   // 즉시 활성화
   self.skipWaiting();
 });
 
 // Service Worker 활성화
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker 활성화됨');
   // 모든 클라이언트 제어
   event.waitUntil(self.clients.claim());
 });
 
 // 푸시 알림 수신
 self.addEventListener('push', (event) => {
-  console.log('푸시 알림 수신:', event);
   
   let notificationData = {};
   
@@ -166,7 +163,7 @@ self.addEventListener('push', (event) => {
 
 // 알림 클릭 처리
 self.addEventListener('notificationclick', (event) => {
-  console.log('알림 클릭됨:', event);
+ 
   
   event.notification.close();
 
@@ -203,19 +200,19 @@ self.addEventListener('notificationclick', (event) => {
 
 // 백그라운드 동기화 (선택사항)
 self.addEventListener('sync', (event) => {
-  console.log('백그라운드 동기화:', event.tag);
+ 
   
   if (event.tag === 'background-sync') {
     event.waitUntil(
       // 백그라운드에서 수행할 작업
-      console.log('백그라운드 동기화 수행')
+     
     );
   }
 });
 
 // 메시지 수신 (앱에서 Service Worker로 메시지 전송 시)
 self.addEventListener('message', (event) => {
-  console.log('Service Worker 메시지 수신:', event.data);
+ 
   
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
