@@ -110,8 +110,16 @@ service cloud.firestore {
           isSafeFieldUpdate(['image']) ||
           // 썸네일만 업데이트
           isSafeFieldUpdate(['thumbnail']) ||
-          // 노트 전체 수정 (편집 시)
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt'])
+          // 제목만 업데이트
+          isSafeFieldUpdate(['title', 'updatedAt']) ||
+          // 내용만 업데이트
+          isSafeFieldUpdate(['content', 'updatedAt']) ||
+          // 카테고리만 업데이트
+          isSafeFieldUpdate(['category', 'updatedAt']) ||
+          // 노트 전체 수정 (편집 시) - 더 유연한 필드 조합 허용
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt']) ||
+          // 작성자의 모든 일반적인 편집 허용 (author 필드 제외한 기본 필드들)
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userUid', 'userId', 'author', 'createdAt', 'views', 'likes', 'commentCount', 'comment'])
         )) ||
         // 다른 사용자는 상호작용 관련 필드만 수정 가능
         isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment']) ||

@@ -16,6 +16,17 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'public',
       filename: 'sw.js',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Firestore 요청은 Service Worker에서 직접 처리
+        globIgnores: ['**/node_modules/**/*'],
+        // 소스 맵 생성 비활성화
+        sourcemap: false
+      },
+      workbox: {
+        // 소스 맵 생성 비활성화
+        sourcemap: false
+      },
       manifest: {
         name: 'NoteRoom - 감정과 생각을 기록하고 공유하는 소셜 노트 플랫폼',
         short_name: 'NoteRoom',
@@ -33,11 +44,6 @@ export default defineConfig({
             type: 'image/svg+xml'
           }
         ]
-      },
-      injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Firestore 요청은 Service Worker에서 직접 처리
-        globIgnores: ['**/node_modules/**/*']
       },
       devOptions: {
         enabled: true,
