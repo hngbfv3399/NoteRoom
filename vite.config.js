@@ -18,13 +18,11 @@ export default defineConfig({
       filename: 'sw.js',
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // Firestore 요청은 Service Worker에서 직접 처리
         globIgnores: ['**/node_modules/**/*'],
-        // 소스 맵 생성 비활성화
-        sourcemap: false
+        sourcemap: false,
+        rollupFormat: 'es'
       },
       workbox: {
-        // 소스 맵 생성 비활성화
         sourcemap: false
       },
       manifest: {
@@ -58,8 +56,13 @@ export default defineConfig({
   },
   build: {
     sourcemap: false, // 프로덕션에서 소스 맵 비활성화
+    minify: 'terser',
+    terserOptions: {
+      sourceMap: false
+    },
     rollupOptions: {
       output: {
+        sourcemap: false,
         manualChunks: {
           vendor: ['react', 'react-dom'],
           firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage']

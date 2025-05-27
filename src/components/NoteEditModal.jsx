@@ -88,11 +88,22 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
 
   // 노트 업데이트 핸들러
   const handleUpdate = async () => {
-    if (!note) return;
+    console.log("=== NoteEditModal handleUpdate 시작 ===");
+    console.log("note:", note);
+    console.log("title:", title);
+    console.log("category:", category);
+    console.log("editor:", editor);
+    console.log("editor.getHTML():", editor?.getHTML());
+    
+    if (!note) {
+      console.log("note가 없어서 종료");
+      return;
+    }
 
     try {
       setError(null);
       setIsLoading(true);
+      console.log("로딩 시작");
 
       // 유효성 검사
       if (!title.trim()) {
@@ -111,7 +122,13 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
         content: editor.getHTML(),
       };
 
+      console.log("=== NoteEditModal 업데이트 데이터 ===");
+      console.log("updateData:", updateData);
+      console.log("note.id:", note.id);
+
       await updateNoteInFirestore(note.id, updateData);
+      
+      console.log("업데이트 성공!");
       
       // 부모 컴포넌트에 업데이트 알림
       if (onNoteUpdated) {
@@ -124,10 +141,13 @@ function NoteEditModal({ isOpen, onClose, note, onNoteUpdated, onNoteDeleted }) 
 
       onClose();
     } catch (error) {
+      console.error("=== NoteEditModal 에러 ===");
+      console.error("error:", error);
       setError(error.message);
       console.error('노트 업데이트 실패:', error);
     } finally {
       setIsLoading(false);
+      console.log("로딩 종료");
     }
   };
 

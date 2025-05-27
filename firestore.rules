@@ -83,61 +83,96 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    // 노트 컬렉션 규칙 - 2025.05.27 업데이트
+    // 드래프트 컬렉션 (임시저장) - 새로 추가
+    match /drafts/{draftId} {
+      // 읽기/쓰기: 본인만 가능
+      allow read, write: if isAuthenticated() && 
+                            request.auth.uid == resource.data.userUid;
+      
+      // 생성: 인증된 사용자만 가능
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userUid == request.auth.uid &&
+                       isValidDraftData(request.resource.data);
+    }
+
+    // 노트 컬렉션 규칙 개선 - 2025.05.27 v2.3 (모든 노트 공개)
     match /notes/{noteId} {
-      // 읽기는 모든 인증된 사용자에게 허용
-      allow read: if isAuthenticated();
+      // 읽기: 모든 사용자 허용 (모든 노트 공개)
+      allow read: if true;
       
-      // 생성 시 필수 필드 확인 - userUid 필드 사용
-      allow create: if isAuthenticated() 
-        && request.resource.data.userUid == request.auth.uid
-        && request.resource.data.title is string
-        && request.resource.data.content is string
-        && request.resource.data.category is string
-        && request.resource.data.likes is number
-        && request.resource.data.views is number
-        && request.resource.data.commentCount is number;
+      // 생성: 인증된 사용자만 가능
+      allow create: if isAuthenticated() && 
+                       request.resource.data.userUid == request.auth.uid &&
+                       isValidNoteData(request.resource.data);
       
-      // 수정 규칙을 더 세분화 - 2025.05.27 업데이트
+      // 수정: 작성자만 가능 (개선된 규칙) 또는 통계 필드 업데이트
       allow update: if isAuthenticated() && (
-        // 작성자는 모든 필드 수정 가능 (노트 편집 기능) - userUid 또는 userId 확인
-        ((resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid) && (
-          // 일반 노트 수정 (제목, 내용, 카테고리, 이미지, 썸네일)
-          isSafeFieldUpdate(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt']) ||
-          // 노트 수정 시간만 업데이트
-          isSafeFieldUpdate(['updatedAt']) ||
-          // 썸네일 이미지만 업데이트
-          isSafeFieldUpdate(['image']) ||
-          // 썸네일만 업데이트
-          isSafeFieldUpdate(['thumbnail']) ||
-          // 제목만 업데이트
-          isSafeFieldUpdate(['title', 'updatedAt']) ||
-          // 내용만 업데이트
-          isSafeFieldUpdate(['content', 'updatedAt']) ||
-          // 카테고리만 업데이트
-          isSafeFieldUpdate(['category', 'updatedAt']) ||
-          // 노트 전체 수정 (편집 시) - 더 유연한 필드 조합 허용
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'image', 'thumbnail', 'updatedAt']) ||
-          // 작성자의 모든 일반적인 편집 허용 (author 필드 제외한 기본 필드들)
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['userUid', 'userId', 'author', 'createdAt', 'views', 'likes', 'commentCount', 'comment'])
-        )) ||
-        // 다른 사용자는 상호작용 관련 필드만 수정 가능
-        isSafeFieldUpdate(['views', 'likes', 'commentCount', 'comment']) ||
-        // 관리자는 댓글 마이그레이션을 위해 comment 필드와 마이그레이션 관련 필드 업데이트 가능
-        (isAdmin() && isSafeFieldUpdate(['comment', 'commentMigratedAt'])) ||
-        // 관리자는 썸네일 마이그레이션을 위해 thumbnail 필드와 마이그레이션 관련 필드 업데이트 가능
-        (isAdmin() && isSafeFieldUpdate(['thumbnail', 'thumbnailMigratedAt']))
+        // 1. 작성자가 노트 내용을 수정하는 경우
+        ((resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid) &&
+         isValidNoteUpdate(resource.data, request.resource.data)) ||
+        
+        // 2. 통계 필드만 업데이트하는 경우 (조회수, 좋아요, 댓글 수)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'commentCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'likes', 'commentCount'])) ||
+        
+        // 3. 댓글 관련 필드 업데이트 (인증된 사용자만 가능)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment', 'commentCount']) ||
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'comment']))
       );
       
-      // 삭제는 작성자만 가능 - userUid 또는 userId 확인
-      allow delete: if isAuthenticated() 
-        && (resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid);
+      // 삭제: 작성자만 가능
+      allow delete: if isAuthenticated() && 
+                       (resource.data.userUid == request.auth.uid || resource.data.userId == request.auth.uid);
 
       // 좋아요 서브컬렉션 규칙
       match /likesUsers/{userId} {
         allow read: if isAuthenticated();
         allow write: if isAuthenticated() && request.auth.uid == userId;
       }
+    }
+
+    // 노트 데이터 유효성 검증 함수
+    function isValidNoteData(data) {
+      return data.keys().hasAll(['title', 'content', 'category', 'userUid']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 50000 &&
+             data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+             data.userUid is string &&
+             (!data.keys().hasAny(['isDraft']) || data.isDraft is bool) &&
+             (!data.keys().hasAny(['tags']) || (data.tags is list && data.tags.size() <= 10)) &&
+             (!data.keys().hasAny(['thumbnail']) || data.thumbnail is string) &&
+             (!data.keys().hasAny(['images']) || (data.images is list && data.images.size() <= 20));
+    }
+
+    // 노트 업데이트 유효성 검증 함수
+    function isValidNoteUpdate(oldData, newData) {
+      // 변경 불가능한 필드 확인
+      return newData.userUid == oldData.userUid &&
+             // 허용된 필드만 변경되었는지 확인
+             newData.diff(oldData).affectedKeys().hasOnly([
+               'title', 'content', 'category', 'thumbnail', 'images', 
+               'isPublic', 'isDraft', 'tags', 'updatedAt'
+             ]) &&
+             // 새 데이터 유효성 검증
+             isValidNoteData(newData);
+    }
+
+    // 드래프트 데이터 유효성 검증 함수
+    function isValidDraftData(data) {
+      return data.keys().hasAll(['userUid']) &&
+             data.userUid is string &&
+             (!data.keys().hasAny(['title']) || (data.title is string && data.title.size() <= 200)) &&
+             (!data.keys().hasAny(['content']) || (data.content is string && data.content.size() <= 50000)) &&
+             (!data.keys().hasAny(['category']) || (data.category is string && data.category.size() <= 50)) &&
+             (!data.keys().hasAny(['thumbnail']) || data.thumbnail is string) &&
+             (!data.keys().hasAny(['images']) || (data.images is list && data.images.size() <= 20)) &&
+             (!data.keys().hasAny(['isAutoSaved']) || data.isAutoSaved is bool);
     }
 
     // 댓글 컬렉션 규칙 (필요시 추가)

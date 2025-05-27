@@ -211,23 +211,47 @@ function MenuBar({ editor }) {
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
 
-      // 에디터에 이미지 삽입
-      editor.chain().focus().setImage({ 
-        src: url,
-        width: '300px',
-        height: 'auto',
-        style: 'object-fit: contain;'
-      }).run();
+      // 에디터에 이미지 삽입 - 기존 텍스트를 보존하면서 현재 위치에 삽입
+      const { state } = editor;
+      const { selection } = state;
+      const { from } = selection;
+      
+      // 현재 커서 위치에 이미지 삽입 (기존 내용을 덮어쓰지 않음)
+      editor.chain()
+        .focus()
+        .setTextSelection(from) // 현재 위치로 커서 이동
+        .insertContent({
+          type: 'image',
+          attrs: {
+            src: url,
+            width: '300px',
+            height: 'auto',
+            style: 'object-fit: contain;'
+          }
+        })
+        .run();
+
+      // 이미지 삽입 후 커서를 이미지 다음으로 이동
+      setTimeout(() => {
+        const imagePos = from;
+        editor.chain().focus().setTextSelection(imagePos + 1).run();
+      }, 100);
 
       // 이미지 선택 이벤트 발생
-      const { state } = editor;
-      const pos = state.selection.from;
-      window.dispatchEvent(new CustomEvent('imageSelected', {
-        detail: { 
-          pos,
-          node: state.doc.nodeAt(pos)
+      setTimeout(() => {
+        const currentState = editor.state;
+        const pos = from;
+        const node = currentState.doc.nodeAt(pos);
+        
+        if (node && node.type.name === 'image') {
+          window.dispatchEvent(new CustomEvent('imageSelected', {
+            detail: { 
+              pos,
+              node
+            }
+          }));
         }
-      }));
+      }, 150);
 
     } catch (error) {
       console.error("이미지 업로드 실패:", error);

@@ -22,11 +22,6 @@ import { auth } from "@/services/firebase";
 import LoadingPage from "@/components/LoadingPage";
 import ThemedButton from "@/components/ui/ThemedButton";
 import { useSelector } from 'react-redux';
-// 보안 관련 imports 추가
-import { validateNote, validateImageFile, validateUrl } from '@/utils/validation';
-import { checkNoteWriteLimit, checkImageUploadLimit } from '@/utils/rateLimiter';
-import { normalizeInput, createSafeErrorMessage } from '@/utils/security';
-import { sanitizeHtml } from '@/utils/sanitizeHtml';
 
 const CustomImage = Image.configure({
   inline: true,
@@ -541,23 +536,7 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
         'data-testid': 'editor-content',
       },
       handleDOMEvents: {
-        // 텍스트 선택 이벤트 처리
-        selectstart: () => false, // 기본 선택 동작 허용
-        mousedown: () => {
-          // 텍스트 선택을 위한 마우스 다운 이벤트 허용
-          return false;
-        },
-        mouseup: (view) => {
-          // 선택 완료 후 처리
-          setTimeout(() => {
-            const selection = view.state.selection;
-            if (!selection.empty) {
-              // 텍스트 선택 처리 (디버깅 로그 제거)
-            }
-          }, 10);
-          return false;
-        },
-        // 드래그 앤 드롭 이벤트 처리 - 에디터 영역에서도 작동하도록
+        // 드래그 앤 드롭 이벤트만 처리하고 텍스트 입력 관련 이벤트는 제거
         dragenter: () => {
           // 기본 동작을 방지하지 않고 버블링 허용
           return false;
@@ -584,6 +563,14 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
     },
     onSelectionUpdate: () => {
       // 선택 상태 변경 시 처리 (디버깅 로그 제거)
+    },
+    // 에디터 업데이트 시 디버깅 로그 추가
+    onUpdate: ({ editor }) => {
+      console.log("=== 에디터 업데이트 감지 ===");
+      console.log("현재 HTML:", editor.getHTML());
+      console.log("현재 텍스트:", editor.getText());
+      console.log("isEmpty:", editor.isEmpty);
+      console.log("characterCount:", editor.storage.characterCount?.characters() || 0);
     },
   });
 
@@ -657,10 +644,20 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
 }
 
 export default function WriteEditor({ editId }) {
+  console.log("=== WriteEditor 컴포넌트 시작 ===");
+  console.log("받은 editId:", editId);
+  console.log("editId 타입:", typeof editId);
+  console.log("editId가 truthy인가:", !!editId);
+  
   const [editor, setEditor] = useState(null);
   const [title, setTitle] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [isLoadingNote, setIsLoadingNote] = useState(!!editId);
+
+  console.log("초기 상태:");
+  console.log("- editor:", editor);
+  console.log("- isLoadingNote:", isLoadingNote);
+  console.log("- !!editId:", !!editId);
 
   const handleChange = (e) => {
     setSelectedCategory(e.target.value);
@@ -668,28 +665,167 @@ export default function WriteEditor({ editId }) {
 
   // 기존 노트 불러오기
   useEffect(() => {
-    if (editId && editor) {
+    console.log("=== useEffect 실행됨 ===");
+    console.log("editId:", editId);
+    console.log("editor:", editor);
+    console.log("editor 존재 여부:", !!editor);
+    console.log("editor.isInitialized:", editor?.isInitialized);
+    console.log("조건 체크 (editId && editor):", editId && editor);
+    
+    if (editId && editor && editor.isInitialized) {
+      console.log("✅ 조건 만족 - 노트 로딩 시작");
       const loadExistingNote = async () => {
         try {
           setIsLoadingNote(true);
+          console.log("=== WriteEditor 노트 로드 시작 ===");
+          console.log("editId:", editId);
+          
           // 노트 데이터 불러오기 로직 추가 필요
           const { getNoteById } = await import("@/utils/firebaseNoteDataUtil");
           const noteData = await getNoteById(editId);
           
+          console.log("=== 로드된 노트 데이터 ===");
+          console.log("noteData:", noteData);
+          console.log("title:", noteData?.title);
+          console.log("category:", noteData?.category);
+          console.log("content:", noteData?.content);
+          console.log("content 타입:", typeof noteData?.content);
+          console.log("content 길이:", noteData?.content?.length);
+          console.log("content 첫 100자:", noteData?.content?.substring(0, 100));
+          console.log("content에 HTML 태그가 있는가:", /<[^>]*>/g.test(noteData?.content || ''));
+          console.log("content에 이미지 태그가 있는가:", /<img[^>]*>/g.test(noteData?.content || ''));
+          
+          // content를 텍스트로만 추출해보기
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = noteData?.content || '';
+          const textOnly = tempDiv.textContent || tempDiv.innerText || '';
+          console.log("content에서 텍스트만 추출:", textOnly);
+          console.log("텍스트 길이:", textOnly.length);
+          
           if (noteData) {
             setTitle(noteData.title || "");
             setSelectedCategory(noteData.category || "");
-            editor.commands.setContent(noteData.content || "");
+            
+            // 에디터에 content 설정
+            const content = noteData.content || "";
+            console.log("에디터에 설정할 content:", content);
+            
+            if (content) {
+              // TipTap 에디터에 content 설정 - 안전한 방법 사용
+              try {
+                console.log("=== 에디터 content 설정 시작 ===");
+                console.log("설정할 content:", content);
+                console.log("에디터 상태:", {
+                  isDestroyed: editor.isDestroyed,
+                  isFocused: editor.isFocused,
+                  isEmpty: editor.isEmpty
+                });
+                
+                // 방법 1: 에디터 초기화 후 content 설정
+                editor.commands.clearContent();
+                console.log("에디터 초기화 완료");
+                
+                // 잠시 기다린 후 content 설정
+                setTimeout(() => {
+                  if (editor && !editor.isDestroyed) {
+                    try {
+                      console.log("=== setContent 시도 ===");
+                      // HTML 문자열을 직접 설정
+                      editor.commands.setContent(content, false, {
+                        preserveWhitespace: 'full'
+                      });
+                      console.log("방법 1: setContent with options 완료");
+                      
+                      // 설정 후 즉시 확인
+                      const immediateContent = editor.getHTML();
+                      console.log("즉시 확인된 content:", immediateContent);
+                      console.log("즉시 확인된 content 길이:", immediateContent.length);
+                      
+                      // 설정 후 확인
+                      setTimeout(() => {
+                        const currentContent = editor.getHTML();
+                        console.log("=== 최종 확인 ===");
+                        console.log("최종 에디터 content:", currentContent);
+                        console.log("content 설정 성공 여부:", currentContent.length > 20);
+                        console.log("에디터 상태:", {
+                          isEmpty: editor.isEmpty,
+                          characterCount: editor.storage.characterCount?.characters() || 0
+                        });
+                        
+                        // 만약 여전히 비어있다면 강제로 HTML 삽입
+                        if (currentContent.length <= 20) { // <p></p> 정도의 길이
+                          console.log("content가 여전히 비어있음, 강제 삽입 시도");
+                          console.log("강제 삽입할 content:", content);
+                          editor.commands.insertContent(content);
+                          
+                          // 강제 삽입 후 다시 확인
+                          setTimeout(() => {
+                            const finalContent = editor.getHTML();
+                            console.log("강제 삽입 후 content:", finalContent);
+                          }, 100);
+                        }
+                      }, 200);
+                    } catch (setContentError) {
+                      console.error("setContent 실패:", setContentError);
+                      
+                      // 방법 2: insertContent 사용
+                      try {
+                        console.log("=== insertContent 시도 ===");
+                        editor.commands.insertContent(content);
+                        console.log("방법 2: insertContent 완료");
+                        
+                        setTimeout(() => {
+                          const insertedContent = editor.getHTML();
+                          console.log("insertContent 후 content:", insertedContent);
+                        }, 100);
+                      } catch (insertError) {
+                        console.error("insertContent도 실패:", insertError);
+                        
+                        // 방법 3: 직접 DOM 조작 (최후의 수단)
+                        try {
+                          console.log("=== 직접 DOM 조작 시도 ===");
+                          const editorElement = editor.view.dom;
+                          editorElement.innerHTML = content;
+                          console.log("방법 3: 직접 DOM 조작 완료");
+                          
+                          setTimeout(() => {
+                            const domContent = editorElement.innerHTML;
+                            console.log("DOM 조작 후 content:", domContent);
+                          }, 100);
+                        } catch (domError) {
+                          console.error("DOM 조작도 실패:", domError);
+                        }
+                      }
+                    }
+                  } else {
+                    console.error("에디터가 파괴되었거나 없음");
+                  }
+                }, 300);
+                
+              } catch (error) {
+                console.error("전체 content 설정 실패:", error);
+              }
+            } else {
+              console.log("content가 비어있어서 에디터에 설정하지 않음");
+            }
+          } else {
+            console.log("noteData가 없음");
           }
         } catch (error) {
           console.error("노트 불러오기 실패:", error);
           alert("노트를 불러오는 중 오류가 발생했습니다.");
         } finally {
           setIsLoadingNote(false);
+          console.log("=== WriteEditor 노트 로드 완료 ===");
         }
       };
 
       loadExistingNote();
+    } else {
+      console.log("❌ 조건 불만족:");
+      console.log("- editId 존재:", !!editId);
+      console.log("- editor 존재:", !!editor);
+      console.log("- editor 초기화됨:", editor?.isInitialized);
     }
   }, [editId, editor]);
 

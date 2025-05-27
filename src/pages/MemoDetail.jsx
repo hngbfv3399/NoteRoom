@@ -71,15 +71,37 @@ function MemoDetail({ note: propNote }) {
       const fetchNote = async () => {
         setLoading(true);
         try {
+          console.log("=== MemoDetail 노트 로드 시작 ===");
+          console.log("노트 ID:", id);
+          
           const noteDoc = await getDoc(doc(db, "notes", id));
           if (noteDoc.exists()) {
             const noteData = { id: noteDoc.id, ...noteDoc.data() };
+            
+            console.log("=== MemoDetail 로드된 노트 데이터 ===");
+            console.log("noteData:", noteData);
+            console.log("title:", noteData.title);
+            console.log("content:", noteData.content);
+            console.log("content 타입:", typeof noteData.content);
+            console.log("content 길이:", noteData.content?.length);
+            console.log("content 첫 100자:", noteData.content?.substring(0, 100));
+            console.log("content에 HTML 태그가 있는가:", /<[^>]*>/g.test(noteData.content || ''));
+            console.log("content에 이미지 태그가 있는가:", /<img[^>]*>/g.test(noteData.content || ''));
+            
+            // content를 텍스트로만 추출해보기
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = noteData.content || '';
+            const textOnly = tempDiv.textContent || tempDiv.innerText || '';
+            console.log("content에서 텍스트만 추출:", textOnly);
+            console.log("텍스트 길이:", textOnly.length);
+            
             setNote(noteData);
             setLikes(noteData.likes || 0);
             
             // 메타 태그 업데이트 (소셜 미디어 공유용)
             updateMetaTags(noteData);
           } else {
+            console.log("노트를 찾을 수 없음");
             setError("노트를 찾을 수 없습니다.");
           }
         } catch (err) {
@@ -87,10 +109,16 @@ function MemoDetail({ note: propNote }) {
           setError("노트를 불러오는 중 오류가 발생했습니다.");
         } finally {
           setLoading(false);
+          console.log("=== MemoDetail 노트 로드 완료 ===");
         }
       };
       fetchNote();
     } else if (propNote) {
+      console.log("=== MemoDetail prop으로 받은 노트 ===");
+      console.log("propNote:", propNote);
+      console.log("propNote.content:", propNote.content);
+      console.log("propNote.content 길이:", propNote.content?.length);
+      
       setLikes(propNote.likes || 0);
       // prop으로 받은 경우에도 메타 태그 업데이트
       updateMetaTags(propNote);
@@ -416,6 +444,18 @@ function MemoDetail({ note: propNote }) {
       )}
 
       {/* 노트 내용 */}
+      {(() => {
+        console.log("=== MemoDetail 렌더링 시점 ===");
+        console.log("note.content:", note.content);
+        console.log("note.content 타입:", typeof note.content);
+        console.log("note.content 길이:", note.content?.length);
+        
+        const sanitizedContent = sanitizeHtml(note.content) || "내용이 없습니다.";
+        console.log("sanitized content:", sanitizedContent);
+        console.log("sanitized content 길이:", sanitizedContent.length);
+        
+        return null; // 이 함수는 렌더링용이 아니라 로그용
+      })()}
       <div
         className={`ProseMirror prose max-w-none mb-8 ${themeClass}`}
         dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.content) || "내용이 없습니다." }}

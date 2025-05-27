@@ -1,7 +1,7 @@
 import React from "react";
 import { useSelector } from "react-redux";
 
-function ThemedButton({ children, className = "", variant = "primary", ...props }) {
+function ThemedButton({ children, className = "", variant = "primary", loading = false, disabled = false, ...props }) {
   const theme = useSelector((state) => {
     const current = state.theme.current;
     return state.theme.themes[current];
@@ -20,6 +20,9 @@ function ThemedButton({ children, className = "", variant = "primary", ...props 
     }
   };
 
+  // loading이나 disabled 상태일 때 버튼 비활성화
+  const isDisabled = loading || disabled;
+
   return (
     <button
       className={`
@@ -28,9 +31,17 @@ function ThemedButton({ children, className = "", variant = "primary", ...props 
         disabled:opacity-50 disabled:cursor-not-allowed
         ${className}
       `}
+      disabled={isDisabled}
       {...props}
     >
-      {children}
+      {loading ? (
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <span>{children}</span>
+        </div>
+      ) : (
+        children
+      )}
     </button>
   );
 }

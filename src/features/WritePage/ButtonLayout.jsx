@@ -16,6 +16,15 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/services/firebase";
 
 function ButtonLayout({ editor, title, category, editId }) {
+  console.log("=== ButtonLayout 컴포넌트 시작 ===");
+  console.log("받은 props:");
+  console.log("- editor:", editor);
+  console.log("- title:", title);
+  console.log("- category:", category);
+  console.log("- editId:", editId);
+  console.log("- editId 타입:", typeof editId);
+  console.log("- isEditMode:", !!editId);
+  
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [imageFile, setImageFile] = useState(null);
@@ -333,15 +342,26 @@ function ButtonLayout({ editor, title, category, editId }) {
   };
 
   const handleSubmit = async () => {
+    console.log("=== ButtonLayout handleSubmit 시작 ===");
+    console.log("isEditMode:", isEditMode);
+    console.log("editId:", editId);
+    
     const user = auth.currentUser;
     if (!user) {
       setError("로그인이 필요합니다.");
       return;
     }
 
+    console.log("user.uid:", user.uid);
+    console.log("title:", title);
+    console.log("category:", category);
+    console.log("editor:", editor);
+    console.log("editor.getHTML():", editor?.getHTML());
+
     try {
       setError(null);
       setUploading(true);
+      console.log("업로드 시작");
       
       // Rate Limiting 검증
       if (!checkNoteWriteLimit(user.uid)) {
@@ -350,17 +370,25 @@ function ButtonLayout({ editor, title, category, editId }) {
       
       // 입력 검증 및 정규화
       const validatedData = validateInput();
+      console.log("validatedData:", validatedData);
 
       let uploadedImageUrl = null;
       
       // 편집 모드에서 기존 이미지 처리
       if (isEditMode) {
+        console.log("=== 편집 모드 이미지 처리 ===");
+        console.log("imageFile:", imageFile);
+        console.log("existingImageUrl:", existingImageUrl);
+        
         // 새로운 이미지가 선택된 경우
         if (imageFile) {
+          console.log("새 이미지 업로드 중...");
           uploadedImageUrl = await uploadImage();
+          console.log("새 이미지 업로드 완료:", uploadedImageUrl);
         } else if (existingImageUrl) {
           // 기존 이미지 URL 사용 (새 이미지를 선택하지 않은 경우)
           uploadedImageUrl = existingImageUrl;
+          console.log("기존 이미지 URL 사용:", uploadedImageUrl);
         } else {
           // 기존 노트의 이미지 유지 (편집 시 이미지를 변경하지 않은 경우)
           try {
@@ -370,6 +398,7 @@ function ButtonLayout({ editor, title, category, editId }) {
               const existingNote = noteDoc.data();
               // 썸네일 필드 우선 확인, 없으면 image 필드 확인
               uploadedImageUrl = existingNote.thumbnail || existingNote.image || null;
+              console.log("기존 노트에서 이미지 로드:", uploadedImageUrl);
             }
           } catch (error) {
             console.warn("기존 노트 이미지 로드 실패:", error);
@@ -383,28 +412,88 @@ function ButtonLayout({ editor, title, category, editId }) {
       }
       
       // HTML 콘텐츠 정화
-      const sanitizedContent = sanitizeHtml(editor.getHTML());
+      const editorContent = editor.getHTML();
+      console.log("=== ButtonLayout content 처리 ===");
+      console.log("원본 editor.getHTML():", editorContent);
+      console.log("원본 content 길이:", editorContent?.length);
+      console.log("원본 content 첫 100자:", editorContent?.substring(0, 100));
       
-      const noteData = {
-        title: validatedData.title,
-        content: sanitizedContent,
-        category: validatedData.category,
-        userUid: user.uid,
-        likes: 0,
-        views: 0,
-        commentCount: 0,
-      };
-
-      // 이미지가 있을 때만 추가 (null이나 undefined가 아닌 경우)
-      if (uploadedImageUrl) {
-        noteData.image = uploadedImageUrl;
-        noteData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
-      }
-
+      // 에디터의 텍스트만 추출해보기
+      const editorText = editor.getText();
+      console.log("=== 에디터 텍스트 확인 ===");
+      console.log("editor.getText():", editorText);
+      console.log("editor.getText() 길이:", editorText?.length);
+      console.log("editor.isEmpty:", editor.isEmpty);
+      console.log("editor.storage.characterCount:", editor.storage.characterCount?.characters() || 0);
+      
+      // 에디터 내부 상태 확인
+      console.log("=== 에디터 내부 상태 ===");
+      console.log("editor.state.doc.textContent:", editor.state.doc.textContent);
+      console.log("editor.state.doc.content:", editor.state.doc.content);
+      console.log("editor.view.dom.textContent:", editor.view.dom.textContent);
+      console.log("editor.view.dom.innerHTML:", editor.view.dom.innerHTML);
+      
+      const sanitizedContent = sanitizeHtml(editorContent);
+      console.log("sanitized content:", sanitizedContent);
+      console.log("sanitized content 길이:", sanitizedContent?.length);
+      console.log("sanitized content 첫 100자:", sanitizedContent?.substring(0, 100));
+      
+      // content에서 텍스트만 추출해보기
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = sanitizedContent || '';
+      const textOnly = tempDiv.textContent || tempDiv.innerText || '';
+      console.log("content에서 텍스트만 추출:", textOnly);
+      console.log("텍스트 길이:", textOnly.length);
+      
+      // 빈 p 태그 확인
+      const emptyPTags = (sanitizedContent.match(/<p><\/p>/g) || []).length;
+      const emptyPTagsWithSpace = (sanitizedContent.match(/<p>\s*<\/p>/g) || []).length;
+      console.log("빈 <p></p> 태그 개수:", emptyPTags);
+      console.log("공백만 있는 <p> </p> 태그 개수:", emptyPTagsWithSpace);
+      
       if (isEditMode) {
-        await updateNoteInFirestore(editId, noteData);
+        console.log("=== 편집 모드: 노트 업데이트 ===");
+        // 편집 모드: 허용된 필드만 업데이트
+        const updateData = {
+          title: validatedData.title,
+          content: sanitizedContent,
+          category: validatedData.category,
+        };
+
+        // 이미지가 있을 때만 추가 (null이나 undefined가 아닌 경우)
+        if (uploadedImageUrl) {
+          updateData.image = uploadedImageUrl;
+          updateData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
+        }
+
+        console.log("=== ButtonLayout 업데이트 데이터 ===");
+        console.log("updateData:", JSON.stringify(updateData, null, 2));
+        console.log("editId:", editId);
+
+        await updateNoteInFirestore(editId, updateData);
+        console.log("노트 업데이트 완료!");
       } else {
+        console.log("=== 새 글 작성 모드 ===");
+        // 새 글 작성 모드: 전체 노트 데이터 생성
+        const noteData = {
+          title: validatedData.title,
+          content: sanitizedContent,
+          category: validatedData.category,
+          userUid: user.uid,
+          likes: 0,
+          views: 0,
+          commentCount: 0,
+        };
+
+        // 이미지가 있을 때만 추가 (null이나 undefined가 아닌 경우)
+        if (uploadedImageUrl) {
+          noteData.image = uploadedImageUrl;
+          noteData.thumbnail = uploadedImageUrl; // 썸네일 필드도 함께 설정
+        }
+
+        console.log("새 노트 데이터:", noteData);
         await saveNoteToFirestore(noteData);
+        console.log("새 노트 저장 완료!");
       }
       
       // 저장 성공 후 메인 페이지로 이동하면서 새로고침 플래그 전달
@@ -413,12 +502,15 @@ function ButtonLayout({ editor, title, category, editId }) {
         replace: true // 뒤로가기 시 작성 페이지로 돌아가지 않도록
       });
     } catch (error) {
+      console.error("=== ButtonLayout 에러 ===");
+      console.error("error:", error);
       // 안전한 에러 메시지 생성
       const safeErrorMessage = createSafeErrorMessage(error, import.meta.env.PROD);
       setError(safeErrorMessage);
       console.error("노트 저장 실패:", error);
     } finally {
       setUploading(false);
+      console.log("업로드 종료");
     }
   };
 
@@ -754,7 +846,23 @@ function ButtonLayout({ editor, title, category, editId }) {
               취소
             </ThemedButton>
             <ThemedButton 
-              onClick={handleSubmit} 
+              onClick={() => {
+                console.log("🔥🔥🔥 저장 버튼 클릭됨! 🔥🔥🔥");
+                console.log("현재 시간:", new Date().toISOString());
+                console.log("=== 저장 버튼 클릭 시점 상태 ===");
+                console.log("uploading:", uploading);
+                console.log("isEditMode:", isEditMode);
+                console.log("imageFile:", imageFile);
+                console.log("existingImageUrl:", existingImageUrl);
+                console.log("isContentComplete:", isContentComplete);
+                console.log("title:", title);
+                console.log("category:", category);
+                console.log("editor:", editor);
+                console.log("editor?.getHTML():", editor?.getHTML());
+                console.log("버튼 disabled 상태:", uploading || (!isEditMode && !(imageFile || existingImageUrl)) || !isContentComplete);
+                console.log("=== handleSubmit 호출 시작 ===");
+                handleSubmit();
+              }} 
               disabled={uploading || (!isEditMode && !(imageFile || existingImageUrl)) || !isContentComplete}
               className="px-8 py-3 font-semibold"
             >

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>드래프트 유틸리티 테스트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .test-result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>드래프트 유틸리티 테스트</h1>
+        <p>이 페이지에서 드래프트 유틸리티 함수들을 테스트할 수 있습니다.</p>
+        
+        <div>
+            <button onclick="runValidationTests()">유효성 검증 테스트 실행</button>
+            <button onclick="clearResults()">결과 지우기</button>
+        </div>
+        
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        // 드래프트 데이터 유효성 검증 함수 (복사)
+        function validateDraftData(data) {
+            const errors = [];
+            
+            // 제목 검증
+            if (data.title && typeof data.title === 'string') {
+                if (data.title.length > 200) {
+                    errors.push('제목은 200자를 초과할 수 없습니다.');
+                }
+            }
+            
+            // 내용 검증
+            if (data.content && typeof data.content === 'string') {
+                if (data.content.length > 50000) {
+                    errors.push('내용은 50,000자를 초과할 수 없습니다.');
+                }
+            }
+            
+            // 카테고리 검증
+            if (data.category && typeof data.category === 'string') {
+                if (data.category.length > 50) {
+                    errors.push('카테고리는 50자를 초과할 수 없습니다.');
+                }
+            }
+            
+            // 이미지 검증
+            if (data.images && Array.isArray(data.images)) {
+                if (data.images.length > 20) {
+                    errors.push('이미지는 최대 20개까지 첨부할 수 있습니다.');
+                }
+            }
+            
+            return {
+                isValid: errors.length === 0,
+                errors: errors
+            };
+        }
+
+        // 테스트 실행 함수
+        function runValidationTests() {
+            const results = [];
+            let passCount = 0;
+            let totalCount = 0;
+
+            // 테스트 헬퍼 함수
+            const test = (name, condition) => {
+                totalCount++;
+                if (condition) {
+                    results.push(`✅ ${name}: PASS`);
+                    passCount++;
+                } else {
+                    results.push(`❌ ${name}: FAIL`);
+                }
+            };
+
+            results.push('=== 드래프트 유틸리티 테스트 시작 ===\n');
+
+            // 테스트 1: 유효한 데이터
+            const validDraft = {
+                title: '테스트 제목',
+                content: '<p>테스트 내용</p>',
+                category: '일상',
+                images: ['image1.jpg']
+            };
+            
+            const result1 = validateDraftData(validDraft);
+            test('유효한 데이터', result1.isValid && result1.errors.length === 0);
+
+            // 테스트 2: 제목 길이 초과
+            const invalidTitle = {
+                title: 'a'.repeat(201),
+                content: '<p>테스트</p>',
+                category: '일상'
+            };
+            
+            const result2 = validateDraftData(invalidTitle);
+            test('제목 길이 초과', !result2.isValid && result2.errors.includes('제목은 200자를 초과할 수 없습니다.'));
+
+            // 테스트 3: 내용 길이 초과
+            const invalidContent = {
+                title: '테스트',
+                content: 'a'.repeat(50001),
+                category: '일상'
+            };
+            
+            const result3 = validateDraftData(invalidContent);
+            test('내용 길이 초과', !result3.isValid && result3.errors.includes('내용은 50,000자를 초과할 수 없습니다.'));
+
+            // 테스트 4: 카테고리 길이 초과
+            const invalidCategory = {
+                title: '테스트',
+                content: '<p>테스트</p>',
+                category: 'a'.repeat(51)
+            };
+            
+            const result4 = validateDraftData(invalidCategory);
+            test('카테고리 길이 초과', !result4.isValid && result4.errors.includes('카테고리는 50자를 초과할 수 없습니다.'));
+
+            // 테스트 5: 이미지 개수 초과
+            const invalidImages = {
+                title: '테스트',
+                content: '<p>테스트</p>',
+                category: '일상',
+                images: Array(21).fill('image.jpg')
+            };
+            
+            const result5 = validateDraftData(invalidImages);
+            test('이미지 개수 초과', !result5.isValid && result5.errors.includes('이미지는 최대 20개까지 첨부할 수 있습니다.'));
+
+            // 테스트 6: 빈 데이터 (모든 필드 선택사항)
+            const emptyDraft = {};
+            const result6 = validateDraftData(emptyDraft);
+            test('빈 데이터 허용', result6.isValid && result6.errors.length === 0);
+
+            // 테스트 7: 여러 오류
+            const multipleErrors = {
+                title: 'a'.repeat(201),
+                content: 'a'.repeat(50001),
+                category: 'a'.repeat(51),
+                images: Array(21).fill('image.jpg')
+            };
+            
+            const result7 = validateDraftData(multipleErrors);
+            test('여러 오류 감지', !result7.isValid && result7.errors.length === 4);
+
+            results.push(`\n=== 테스트 완료: ${passCount}/${totalCount} 통과 ===`);
+            
+            // 결과 표시
+            const resultDiv = document.getElementById('testResults');
+            const isSuccess = passCount === totalCount;
+            resultDiv.className = `test-result ${isSuccess ? 'success' : 'error'}`;
+            resultDiv.textContent = results.join('\n');
+        }
+
+        function clearResults() {
+            document.getElementById('testResults').textContent = '';
+            document.getElementById('testResults').className = '';
+        }
+    </script>
+</body>
+</html> 

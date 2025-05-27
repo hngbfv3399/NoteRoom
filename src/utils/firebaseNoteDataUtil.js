@@ -329,19 +329,50 @@ export const loadNotesPage = async (lastVisibleDoc = null, pageSize = 10, userId
   }
 };
 
-// 조회수 증가 함수 (선택사항, 다른 파일에 분리 가능)
+// 조회수 증가 함수 (누락된 필드 자동 보완 포함)
 export const incrementNoteViews = async (noteId) => {
   const docRef = doc(db, "notes", noteId);
-  const docSnap = await getDoc(docRef);
-
-  if (!docSnap.exists()) {
-    throw new Error(`문서가 존재하지 않습니다: ${noteId}`);
-  }
-
+  
   try {
-    await updateDoc(docRef, {
-      views: increment(1),
-    });
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      throw new Error(`문서가 존재하지 않습니다: ${noteId}`);
+    }
+
+    const data = docSnap.data();
+    const updates = {};
+
+    // 누락된 필드들 자동 보완
+    if (typeof data.views !== 'number') {
+      updates.views = 1; // 첫 조회
+      console.log(`노트 ${noteId}: views 필드 초기화`);
+    } else {
+      updates.views = increment(1);
+    }
+
+    // 다른 필수 필드들도 누락되어 있으면 보완
+    if (typeof data.likes !== 'number') {
+      updates.likes = 0;
+      console.log(`노트 ${noteId}: likes 필드 초기화`);
+    }
+
+    if (typeof data.commentCount !== 'number') {
+      // 기존 comment 배열이 있으면 그 길이를, 없으면 0
+      const commentCount = Array.isArray(data.comment) ? data.comment.length : 0;
+      updates.commentCount = commentCount;
+      console.log(`노트 ${noteId}: commentCount 필드 초기화 (${commentCount})`);
+    }
+
+    // userUid 필드 통일 (userId가 있고 userUid가 없는 경우)
+    if (!data.userUid && data.userId) {
+      updates.userUid = data.userId;
+      console.log(`노트 ${noteId}: userUid 필드 추가`);
+    }
+
+    await updateDoc(docRef, updates);
+    console.log(`노트 ${noteId} 조회수 증가 및 필드 보완 완료`);
+    
   } catch (error) {
     console.error("조회수 증가 실패:", error);
     throw error;
@@ -748,7 +779,18 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
   console.log("=== 노트 업데이트 디버깅 ===");
   console.log("noteId:", noteId);
   console.log("currentUser.uid:", currentUser.uid);
-  console.log("updateData:", JSON.stringify(updateData, null, 2));
+  console.log("원본 updateData:", JSON.stringify(updateData, null, 2));
+  
+  // content 필드 특별 디버깅
+  if (updateData.content) {
+    console.log("=== CONTENT 디버깅 ===");
+    console.log("content 타입:", typeof updateData.content);
+    console.log("content 길이:", updateData.content.length);
+    console.log("content 내용:", updateData.content);
+    console.log("content가 빈 문자열인가?", updateData.content === "");
+    console.log("content가 <p></p>인가?", updateData.content === "<p></p>");
+    console.log("content 트림 후:", updateData.content.trim());
+  }
 
   try {
     // 먼저 노트가 존재하고 현재 사용자의 노트인지 확인
@@ -763,6 +805,7 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
     console.log("기존 노트 데이터:", JSON.stringify(noteData, null, 2));
     console.log("기존 노트의 userUid:", noteData.userUid);
     console.log("기존 노트의 userId:", noteData.userId);
+    console.log("기존 노트의 content:", noteData.content);
     
     // userUid 필드로 확인 (Firestore 규칙과 일치)
     if (noteData.userUid !== currentUser.uid && noteData.userId !== currentUser.uid) {
@@ -773,17 +816,44 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
       throw new Error("본인의 노트만 수정할 수 있습니다.");
     }
     
+    // 금지된 필드들 제거 (Firestore 규칙에서 허용하지 않는 필드들)
+    const forbiddenFields = ['userUid', 'userId', 'author', 'createdAt', 'views', 'likes', 'commentCount', 'comment'];
+    const cleanUpdateData = {};
+    
+    Object.keys(updateData).forEach(key => {
+      if (!forbiddenFields.includes(key)) {
+        cleanUpdateData[key] = updateData[key];
+      } else {
+        console.warn(`금지된 필드 제거됨: ${key}`);
+      }
+    });
+    
     // 수정 시간 추가
     const updateDataWithTimestamp = {
-      ...updateData,
+      ...cleanUpdateData,
       updatedAt: serverTimestamp()
     };
     
-    console.log("최종 업데이트 데이터:", JSON.stringify(updateDataWithTimestamp, null, 2));
+    console.log("정리된 업데이트 데이터:", JSON.stringify(updateDataWithTimestamp, null, 2));
     console.log("업데이트할 필드 목록:", Object.keys(updateDataWithTimestamp));
+    
+    // content 필드 최종 확인
+    if (updateDataWithTimestamp.content) {
+      console.log("=== 최종 CONTENT 확인 ===");
+      console.log("최종 content:", updateDataWithTimestamp.content);
+      console.log("최종 content 길이:", updateDataWithTimestamp.content.length);
+    }
     
     await updateDoc(noteDocRef, updateDataWithTimestamp);
     console.log("노트 업데이트 완료:", noteId);
+    
+    // 업데이트 후 다시 확인
+    const updatedDoc = await getDoc(noteDocRef);
+    const updatedData = updatedDoc.data();
+    console.log("=== 업데이트 후 확인 ===");
+    console.log("업데이트된 content:", updatedData.content);
+    console.log("업데이트된 title:", updatedData.title);
+    
     return true;
   } catch (error) {
     console.error("노트 업데이트 실패:", error);
@@ -995,8 +1065,169 @@ export const checkExistingNotesStructure = async () => {
   }
 };
 
+// likesUsers 서브컬렉션 데이터 확인 함수
+export const checkLikesUsersCollection = async (noteId = null) => {
+  console.log("=== likesUsers 서브컬렉션 데이터 확인 ===");
+  
+  try {
+    if (noteId) {
+      // 특정 노트의 likesUsers 확인
+      console.log(`노트 ${noteId}의 likesUsers 확인:`);
+      const likesUsersRef = collection(db, "notes", noteId, "likesUsers");
+      const likesSnapshot = await getDocs(likesUsersRef);
+      
+      console.log(`총 좋아요 수: ${likesSnapshot.size}`);
+      
+      likesSnapshot.docs.forEach((doc, index) => {
+        const data = doc.data();
+        console.log(`좋아요 ${index + 1}:`, {
+          userId: doc.id,
+          data: data,
+          timestamp: data.timestamp ? data.timestamp.toDate() : 'N/A'
+        });
+      });
+    } else {
+      // 모든 노트의 likesUsers 확인
+      console.log("모든 노트의 likesUsers 확인:");
+      
+      const notesQuery = query(
+        collection(db, "notes"),
+        orderBy("createdAt", "desc"),
+        limit(5)
+      );
+      
+      const notesSnapshot = await getDocs(notesQuery);
+      
+      for (const noteDoc of notesSnapshot.docs) {
+        const noteData = noteDoc.data();
+        console.log(`\n--- 노트: ${noteDoc.id} (${noteData.title}) ---`);
+        console.log(`메인 likes 필드: ${noteData.likes || 0}`);
+        
+        // 해당 노트의 likesUsers 서브컬렉션 확인
+        const likesUsersRef = collection(db, "notes", noteDoc.id, "likesUsers");
+        const likesSnapshot = await getDocs(likesUsersRef);
+        
+        console.log(`likesUsers 서브컬렉션 크기: ${likesSnapshot.size}`);
+        
+        if (likesSnapshot.size > 0) {
+          likesSnapshot.docs.forEach((likeDoc, index) => {
+            const likeData = likeDoc.data();
+            console.log(`  좋아요 ${index + 1}:`, {
+              userId: likeDoc.id,
+              data: likeData,
+              timestamp: likeData.timestamp ? likeData.timestamp.toDate() : 'N/A'
+            });
+          });
+        } else {
+          console.log("  좋아요가 없습니다.");
+        }
+        
+        // 데이터 일치성 확인
+        if (noteData.likes !== likesSnapshot.size) {
+          console.warn(`⚠️ 데이터 불일치: 메인 likes(${noteData.likes}) ≠ 서브컬렉션 크기(${likesSnapshot.size})`);
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error("likesUsers 확인 실패:", error);
+  }
+};
+
+// 특정 사용자의 좋아요 기록 확인
+export const checkUserLikesHistory = async (userId) => {
+  console.log(`=== 사용자 ${userId}의 좋아요 기록 확인 ===`);
+  
+  try {
+    const notesQuery = query(
+      collection(db, "notes"),
+      orderBy("createdAt", "desc")
+    );
+    
+    const notesSnapshot = await getDocs(notesQuery);
+    const userLikes = [];
+    
+    for (const noteDoc of notesSnapshot.docs) {
+      const likesUsersRef = collection(db, "notes", noteDoc.id, "likesUsers");
+      const userLikeDoc = await getDoc(doc(likesUsersRef, userId));
+      
+      if (userLikeDoc.exists()) {
+        const noteData = noteDoc.data();
+        userLikes.push({
+          noteId: noteDoc.id,
+          noteTitle: noteData.title,
+          likeData: userLikeDoc.data(),
+          timestamp: userLikeDoc.data().timestamp ? userLikeDoc.data().timestamp.toDate() : 'N/A'
+        });
+      }
+    }
+    
+    console.log(`사용자가 좋아요한 노트 수: ${userLikes.length}`);
+    userLikes.forEach((like, index) => {
+      console.log(`좋아요 ${index + 1}:`, like);
+    });
+    
+    return userLikes;
+    
+  } catch (error) {
+    console.error("사용자 좋아요 기록 확인 실패:", error);
+  }
+};
+
+// 좋아요 데이터 일치성 검사
+export const validateLikesConsistency = async () => {
+  console.log("=== 좋아요 데이터 일치성 검사 ===");
+  
+  try {
+    const notesQuery = query(collection(db, "notes"));
+    const notesSnapshot = await getDocs(notesQuery);
+    
+    const inconsistencies = [];
+    
+    for (const noteDoc of notesSnapshot.docs) {
+      const noteData = noteDoc.data();
+      const likesUsersRef = collection(db, "notes", noteDoc.id, "likesUsers");
+      const likesSnapshot = await getDocs(likesUsersRef);
+      
+      const mainLikes = noteData.likes || 0;
+      const subCollectionSize = likesSnapshot.size;
+      
+      if (mainLikes !== subCollectionSize) {
+        inconsistencies.push({
+          noteId: noteDoc.id,
+          title: noteData.title,
+          mainLikes: mainLikes,
+          subCollectionSize: subCollectionSize,
+          difference: Math.abs(mainLikes - subCollectionSize)
+        });
+      }
+    }
+    
+    console.log(`총 노트 수: ${notesSnapshot.size}`);
+    console.log(`불일치 노트 수: ${inconsistencies.length}`);
+    
+    if (inconsistencies.length > 0) {
+      console.log("불일치 목록:");
+      inconsistencies.forEach((item, index) => {
+        console.log(`${index + 1}. ${item.title} (${item.noteId})`);
+        console.log(`   메인 likes: ${item.mainLikes}, 서브컬렉션: ${item.subCollectionSize}, 차이: ${item.difference}`);
+      });
+    } else {
+      console.log("✅ 모든 노트의 좋아요 데이터가 일치합니다!");
+    }
+    
+    return inconsistencies;
+    
+  } catch (error) {
+    console.error("일치성 검사 실패:", error);
+  }
+};
+
 // 브라우저 콘솔에서 테스트할 수 있도록 전역으로 노출
 if (typeof window !== 'undefined') {
   window.testFirestorePermissions = testFirestorePermissions;
   window.checkExistingNotesStructure = checkExistingNotesStructure;
+  window.checkLikesUsersCollection = checkLikesUsersCollection;
+  window.checkUserLikesHistory = checkUserLikesHistory;
+  window.validateLikesConsistency = validateLikesConsistency;
 }

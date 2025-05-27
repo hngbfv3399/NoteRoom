@@ -26,7 +26,7 @@ export const sanitizeHtml = (html, options = {}) => {
     ],
     ALLOWED_ATTR: [
       'href', 'src', 'alt', 'title', 'width', 'height',
-      'class', 'target', 'rel'
+      'class', 'target', 'rel', 'style'
     ],
     ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     ALLOW_DATA_ATTR: false,
@@ -34,7 +34,7 @@ export const sanitizeHtml = (html, options = {}) => {
     FORBID_TAGS: [
       'script', 'object', 'embed', 'form', 'input', 'button',
       'select', 'textarea', 'iframe', 'frame', 'frameset',
-      'applet', 'base', 'link', 'meta', 'style'
+      'applet', 'base', 'link', 'meta'
     ],
     FORBID_ATTR: [
       'onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout',
@@ -44,14 +44,22 @@ export const sanitizeHtml = (html, options = {}) => {
       'onafterprint', 'onmove', 'onstart', 'onfinish', 'onbounce',
       'onbeforeunload', 'onhashchange', 'onmessage', 'onoffline',
       'ononline', 'onpagehide', 'onpageshow', 'onpopstate',
-      'onredo', 'onstorage', 'onundo', 'onunload', 'style'
+      'onredo', 'onstorage', 'onundo', 'onunload'
     ],
-    KEEP_CONTENT: false,
+    KEEP_CONTENT: true,
     RETURN_DOM: false,
     RETURN_DOM_FRAGMENT: false,
     RETURN_TRUSTED_TYPE: false,
     SANITIZE_DOM: true,
     WHOLE_DOCUMENT: false,
+    // 안전한 스타일 속성만 허용
+    ALLOW_STYLE_ATTR: true,
+    ALLOWED_STYLE_PROPS: [
+      'color', 'background-color', 'font-size', 'font-weight', 'font-style',
+      'text-align', 'text-decoration', 'margin', 'padding',
+      'width', 'height', 'max-width', 'max-height', 'min-width', 'min-height',
+      'display', 'object-fit', 'border-radius', 'border'
+    ],
     ...options
   };
 
@@ -94,7 +102,7 @@ const stripAllHtml = (html) => {
     
     // 추가 정화: 특수 문자 및 제어 문자 제거
     return textContent
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 제어 문자 제거
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // 제어 문자 제거
       .replace(/\s+/g, ' ') // 연속된 공백 정리
       .trim();
   } catch (error) {
@@ -103,7 +111,7 @@ const stripAllHtml = (html) => {
     return html
       .replace(/<[^>]*>/g, '') // HTML 태그 제거
       .replace(/&[a-zA-Z0-9#]+;/g, '') // HTML 엔티티 제거
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 제어 문자 제거
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // 제어 문자 제거
       .replace(/\s+/g, ' ') // 연속된 공백 정리
       .trim();
   }
