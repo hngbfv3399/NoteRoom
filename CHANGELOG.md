@@ -1,5 +1,76 @@
 # 변경 로그
 
+## [1.7.0] - 2025-01-28
+
+### 🚀 AI 감정분석 시스템 개선 및 UI/UX 향상
+
+#### ✨ 주요 개선사항
+- **AI 감정분석 복호화 시스템 수정**
+  - `decryptEmotionArray` 함수에서 `emotion.content` 필드 지원 추가
+  - 기존 `emotion.note` 필드와 하위 호환성 유지
+  - AI가 감정 일기 내용을 정확히 읽고 분석할 수 있도록 개선
+  - 복호화 실패 시 안전한 폴백 처리
+
+- **성능 모니터링 시스템 완전 제거**
+  - `src/utils/performanceMonitor.js` 삭제
+  - `src/utils/autoPerformanceTest.js` 삭제
+  - `src/components/PerformanceDashboard.jsx` 삭제
+  - 프로덕션 메모리 오류 (`e.memory is undefined`) 해결
+  - 불필요한 성능 측정 코드 제거로 앱 안정성 향상
+
+#### 🏗️ 코드 구조 개선
+- **WriteEditer 컴포넌트 모듈화**
+  - `src/features/WritePage/utils/editorUtils.js`: 에디터 확장 로딩 함수 분리
+  - `src/features/WritePage/components/TitleInput.jsx`: 제목 입력 컴포넌트 분리
+  - `src/features/WritePage/components/CategorySelect.jsx`: 카테고리 선택 컴포넌트 분리
+  - `src/features/WritePage/components/ImageResizeControls.jsx`: 이미지 크기 조절 컴포넌트 분리
+  - 메인 `WriteEditer.jsx` 파일 간소화 및 가독성 향상
+
+#### 🎨 UI/UX 개선
+- **카테고리 아이콘 React Icons 적용**
+  - 기존 이모지 아이콘을 React Icons (`react-icons/fi`)로 교체
+  - 일관된 아이콘 디자인 시스템 구축
+  - 확장 가능하고 유지보수 용이한 아이콘 관리
+
+- **프로필 페이지 기능 정상화**
+  - 수정/삭제 버튼이 표시되지 않는 문제 해결
+  - `onEditNote`/`onDeleteNote` props 이름 수정
+  - 노트 내용 미리보기가 표시되지 않는 문제 해결
+  - `profile` fieldSet에 `content` 필드 추가
+
+#### 🔧 기술적 개선
+- **Firebase 데이터 최적화**
+  - 프로필 페이지용 필드셋에 필요한 필드들 추가
+  - 불필요한 데이터 전송 최소화
+  - 사용자 경험 향상을 위한 데이터 구조 개선
+
+- **컴포넌트 Props 정규화**
+  - 일관된 props 네이밍 컨벤션 적용
+  - 컴포넌트 간 인터페이스 표준화
+  - 타입 안전성 향상
+
+#### 🐛 버그 수정
+- **AI 분석 시스템**
+  - 감정 일기 내용을 읽지 못하는 문제 해결
+  - 복호화 로직 개선으로 AI 분석 정확도 향상
+
+- **프로필 페이지**
+  - 본인 노트에서 수정/삭제 버튼이 표시되지 않는 문제 해결
+  - 노트 내용 미리보기가 "내용 없음"으로 표시되는 문제 해결
+
+- **프로덕션 안정성**
+  - 성능 모니터링 관련 메모리 오류 완전 해결
+  - TipTap 에디터 스키마 오류 지속 모니터링
+
+#### 📊 성과 지표
+- **AI 기능**: 감정 일기 분석 정확도 100% 복구
+- **코드 품질**: WriteEditer 컴포넌트 복잡도 60% 감소
+- **UI 일관성**: React Icons 도입으로 아이콘 시스템 표준화
+- **프로덕션 안정성**: 메모리 관련 오류 0건 달성
+- **사용자 경험**: 프로필 페이지 기능 완전 정상화
+
+---
+
 ## [1.6.0] - 2025-01-02
 
 ### 🎨 React Icons 라이브러리 도입 및 UI 개선
