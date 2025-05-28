@@ -332,7 +332,7 @@ function MemoDetail({ note: propNote }) {
       {/* 노트 메타 정보 */}
       <div className={`flex items-center justify-between mb-6 pb-4 border-b ${currentTheme?.textSecondary || 'text-gray-600'}`}>
         <div className="flex items-center space-x-4">
-          <span>작성자: {displayNote.authorName || "익명"}</span>
+          <span>작성자: {displayNote.author || "익명"}</span>
           <span>카테고리: {displayNote.category || "없음"}</span>
           <span>{formatDate(displayNote.createdAt)}</span>
         </div>

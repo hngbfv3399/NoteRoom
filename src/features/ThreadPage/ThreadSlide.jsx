@@ -6,7 +6,7 @@ import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 import { BiErrorCircle, BiImage } from 'react-icons/bi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, getDoc, setDoc, deleteDoc, increment, updateDoc } from 'firebase/firestore';
-import { auth, db } from '@/services/firebase';
+import { auth, db, retryFirebaseOperation } from '@/services/firebase';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 
@@ -113,28 +113,48 @@ function ThreadSlide({ item }) {
     if (!currentUser || !item?.id || isLiking) return;
 
     setIsLiking(true);
+    
+    // 낙관적 업데이트를 위한 이전 상태 저장
+    const previousLiked = userLiked;
+    const previousLikes = likes;
+    
     try {
-      const likeDocRef = doc(db, "notes", item.id, "likesUsers", currentUser.uid);
-      const noteDocRef = doc(db, "notes", item.id);
+      // 낙관적 업데이트
+      setUserLiked(!userLiked);
+      setLikes(prev => userLiked ? Math.max(0, prev - 1) : prev + 1);
+      
+      const operation = async () => {
+        const likeDocRef = doc(db, "notes", item.id, "likesUsers", currentUser.uid);
+        const noteDocRef = doc(db, "notes", item.id);
 
-      if (userLiked) {
-        // 좋아요 취소
-        await deleteDoc(likeDocRef);
-        await updateDoc(noteDocRef, { likes: increment(-1) });
-        setLikes(prev => Math.max(0, prev - 1));
-        setUserLiked(false);
-      } else {
-        // 좋아요 추가
-        await setDoc(likeDocRef, {
-          userId: currentUser.uid,
-          createdAt: new Date(),
-        });
-        await updateDoc(noteDocRef, { likes: increment(1) });
-        setLikes(prev => prev + 1);
-        setUserLiked(true);
-      }
+        if (userLiked) {
+          // 좋아요 취소
+          await deleteDoc(likeDocRef);
+          await updateDoc(noteDocRef, { likes: increment(-1) });
+        } else {
+          // 좋아요 추가
+          await setDoc(likeDocRef, {
+            userId: currentUser.uid,
+            createdAt: new Date(),
+          });
+          await updateDoc(noteDocRef, { likes: increment(1) });
+        }
+      };
+      
+      await retryFirebaseOperation(operation);
     } catch (error) {
       console.error("좋아요 처리 실패:", error);
+      
+      // 에러 발생 시 이전 상태로 롤백
+      setUserLiked(previousLiked);
+      setLikes(previousLikes);
+      
+      // 네트워크 에러인지 확인
+      if (error.code === 'unavailable' || error.message.includes('network')) {
+        alert('네트워크 연결을 확인해주세요.');
+      } else {
+        alert('좋아요 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      }
     } finally {
       setIsLiking(false);
     }

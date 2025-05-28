@@ -23,7 +23,6 @@ import ThemedButton from '@/components/ui/ThemedButton';
 import EmotionMigrationTool from '@/components/EmotionMigrationTool';
 import NotificationSettings from '@/components/NotificationSettings';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { migrateUserNameToDisplayName } from '@/utils/dataStructureUpgrade';
 import { isCurrentUserAdmin } from '@/utils/adminUtils';
 import { showToast } from '@/store/toast/slice';
 import { ADMIN_ROUTES, ROUTES } from '@/constants/routes';
@@ -43,7 +42,6 @@ function SettingPage() {
   });
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isMigrating, setIsMigrating] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // 사용자 데이터 로딩 (개선된 에러 처리)
@@ -133,61 +131,6 @@ function SettingPage() {
     setShowModal(true);
   };
 
-  // 데이터 마이그레이션 핸들러 (관리자 전용, 개선된 확인 및 에러 처리)
-  const handleMigration = async () => {
-    setModalConfig({
-      type: 'warning',
-      title: '데이터 마이그레이션',
-      message: '정말로 마이그레이션을 실행하시겠습니까?\n이 작업은 되돌릴 수 없으며 시스템 전체에 영향을 미칩니다.',
-      showCancel: true,
-      onConfirm: async () => {
-        setIsMigrating(true);
-        setShowModal(false);
-        
-        try {
-          const result = await migrateUserNameToDisplayName();
-          
-          setModalConfig({
-            type: 'success',
-            title: '마이그레이션 완료',
-            message: `마이그레이션이 성공적으로 완료되었습니다!\n\n총 사용자: ${result.total}명\n성공: ${result.migrated}명\n실패: ${result.errors}명`,
-            showCancel: false,
-            onConfirm: () => setShowModal(false)
-          });
-          setShowModal(true);
-          
-          dispatch(showToast({
-            type: 'success',
-            message: `마이그레이션 완료: ${result.migrated}/${result.total}명 성공`
-          }));
-        } catch (error) {
-          console.error('마이그레이션 실패:', error);
-          
-          const errorMessage = error.code === 'permission-denied'
-            ? '마이그레이션 권한이 없습니다.'
-            : '마이그레이션 중 오류가 발생했습니다.';
-          
-          setModalConfig({
-            type: 'error',
-            title: '마이그레이션 실패',
-            message: errorMessage,
-            showCancel: false,
-            onConfirm: () => setShowModal(false)
-          });
-          setShowModal(true);
-          
-          dispatch(showToast({
-            type: 'error',
-            message: errorMessage
-          }));
-        } finally {
-          setIsMigrating(false);
-        }
-      }
-    });
-    setShowModal(true);
-  };
-
   // 로딩 상태 (개선된 UI)
   if (loading || !userData) {
     return (
@@ -269,7 +212,7 @@ function SettingPage() {
               🔧 관리자 도구
             </h2>
             <p className="text-yellow-700 mb-4 text-sm">
-              주의: 이 도구들은 시스템 전체에 영향을 미칩니다.
+              시스템 관리 도구에 접근할 수 있습니다.
             </p>
             <div className="space-y-3">
               <ThemedButton
@@ -283,13 +226,6 @@ function SettingPage() {
                 className="w-full"
               >
                 📢 공지사항 관리
-              </ThemedButton>
-              <ThemedButton
-                onClick={handleMigration}
-                disabled={isMigrating}
-                className="disabled:opacity-50 disabled:cursor-not-allowed w-full"
-              >
-                {isMigrating ? '마이그레이션 중...' : 'userName → displayName 마이그레이션'}
               </ThemedButton>
             </div>
           </section>

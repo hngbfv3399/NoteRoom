@@ -45,8 +45,9 @@ export const addCommentToNote = async (noteId, commentContent) => {
 
   const commentData = {
     id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
-    userUid: currentUser.uid,
-    userName: userData?.displayName || currentUser.displayName || "익명",
+    authorUid: currentUser.uid, // authorUid 필드 사용
+    author: userData?.displayName || currentUser.displayName || "익명", // author 필드 사용
+    userName: userData?.displayName || currentUser.displayName || "익명", // 호환성을 위해 유지
     content: commentContent.trim(),
     createdAt: new Date(),
     replies: [], // 대댓글 배열 추가
@@ -54,11 +55,13 @@ export const addCommentToNote = async (noteId, commentContent) => {
   };
 
   try {
-    // 댓글 추가
+    // 댓글 추가 및 댓글 카운트 증가
     await updateDoc(noteDocRef, {
       comment: arrayUnion(commentData),
-      commentCount: increment(1),
+      commentCount: increment(1), // 댓글 카운트 증가
     });
+
+    console.log(`✅ 댓글 추가 완료 및 댓글 카운트 증가 (노트: ${noteId})`);
 
     // 알림 생성 (노트 작성자에게)
     try {
@@ -1140,8 +1143,9 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
   
   const replyData = {
     id: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
-    userUid: currentUser.uid,
-    userName: userData?.displayName || currentUser.displayName || "익명",
+    authorUid: currentUser.uid, // authorUid 필드 사용
+    author: userData?.displayName || currentUser.displayName || "익명", // author 필드 사용
+    userName: userData?.displayName || currentUser.displayName || "익명", // 호환성을 위해 유지
     content: replyContent.trim(),
     createdAt: new Date(),
   };
@@ -1155,17 +1159,19 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
     updatedComments[commentIndex].replies.push(replyData);
     updatedComments[commentIndex].replyCount = (updatedComments[commentIndex].replyCount || 0) + 1;
 
-    // Firestore 업데이트
+    // Firestore 업데이트 (답글은 댓글 카운트에 포함되지 않음)
     await updateDoc(noteDocRef, {
       comment: updatedComments,
     });
+
+    console.log(`✅ 답글 추가 완료 (노트: ${noteId}, 댓글: ${commentId})`);
 
     // 대댓글 알림 생성 (댓글 작성자에게)
     try {
       const { createReplyNotification } = await import('./notificationUtils');
       await createReplyNotification(
         commentId,
-        targetComment.userUid, // 댓글 작성자 ID
+        targetComment.authorUid || targetComment.userUid, // 댓글 작성자 ID
         currentUser.uid, // 대댓글 작성자 ID
         replyContent.trim(),
         noteId // 노트 ID 추가
@@ -1195,7 +1201,7 @@ export const addReplyToComment = async (noteId, commentId, replyContent) => {
               const mentionedUserId = mentionedUserDoc.id;
               
               // 자신을 멘션한 경우나 댓글 작성자를 멘션한 경우는 제외 (이미 다른 알림이 있음)
-              if (mentionedUserId !== currentUser.uid && mentionedUserId !== targetComment.userUid) {
+              if (mentionedUserId !== currentUser.uid && mentionedUserId !== (targetComment.authorUid || targetComment.userUid)) {
                 await createMentionNotification(
                   noteId,
                   'note',
@@ -1467,6 +1473,327 @@ export const validateLikesConsistency = async () => {
   }
 };
 
+// 기존 댓글들을 author 필드로 마이그레이션하는 함수 (개선된 버전)
+export const migrateCommentsToAuthorField = async () => {
+  try {
+    console.log("=== 댓글 author 필드 마이그레이션 시작 ===");
+    
+    // 현재 사용자 확인
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    console.log("현재 사용자:", currentUser.email);
+    
+    // 모든 노트 가져오기
+    console.log("노트 컬렉션에서 데이터 가져오는 중...");
+    const notesQuery = query(collection(db, "notes"));
+    const notesSnapshot = await getDocs(notesQuery);
+    console.log(`총 ${notesSnapshot.docs.length}개의 노트를 찾았습니다.`);
+    
+    let updatedNotesCount = 0;
+    let updatedCommentsCount = 0;
+    let processedNotesCount = 0;
+    
+    for (const noteDoc of notesSnapshot.docs) {
+      processedNotesCount++;
+      console.log(`노트 ${processedNotesCount}/${notesSnapshot.docs.length} 처리 중... (ID: ${noteDoc.id})`);
+      
+      const noteData = noteDoc.data();
+      const comments = noteData.comment || [];
+      
+      if (comments.length === 0) {
+        console.log(`노트 ${noteDoc.id}: 댓글 없음, 건너뛰기`);
+        continue;
+      }
+      
+      console.log(`노트 ${noteDoc.id}: ${comments.length}개의 댓글 발견`);
+      
+      let hasUpdates = false;
+      const updatedComments = [];
+      
+      for (let i = 0; i < comments.length; i++) {
+        const comment = comments[i];
+        let updatedComment = { ...comment };
+        
+        console.log(`댓글 ${i + 1} 처리 중:`, {
+          id: comment.id,
+          userName: comment.userName,
+          author: comment.author,
+          userUid: comment.userUid,
+          authorUid: comment.authorUid
+        });
+        
+        // author 필드가 없거나 userName과 다른 경우 업데이트
+        if (!comment.author || comment.author !== comment.userName) {
+          const authorName = comment.userName || comment.author || "익명";
+          updatedComment.author = authorName;
+          hasUpdates = true;
+          updatedCommentsCount++;
+          console.log(`✅ 댓글 author 필드 업데이트: ${comment.author || 'null'} → ${authorName}`);
+        }
+        
+        // authorUid 필드가 없는 경우 userUid로 설정
+        if (!comment.authorUid && comment.userUid) {
+          updatedComment.authorUid = comment.userUid;
+          hasUpdates = true;
+          console.log(`✅ 댓글 authorUid 필드 추가: ${comment.userUid}`);
+        }
+        
+        // 댓글 ID가 없는 경우 생성
+        if (!comment.id) {
+          updatedComment.id = `comment_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+          hasUpdates = true;
+          console.log(`✅ 댓글 ID 추가: ${updatedComment.id}`);
+        }
+        
+        // replies 배열이 없는 경우 초기화
+        if (!comment.replies) {
+          updatedComment.replies = [];
+          hasUpdates = true;
+          console.log(`✅ 댓글 replies 배열 초기화`);
+        }
+        
+        // replyCount가 없는 경우 계산해서 추가
+        if (comment.replyCount === undefined) {
+          updatedComment.replyCount = comment.replies ? comment.replies.length : 0;
+          hasUpdates = true;
+          console.log(`✅ 댓글 replyCount 추가: ${updatedComment.replyCount}`);
+        }
+        
+        // 대댓글들도 처리
+        if (comment.replies && Array.isArray(comment.replies)) {
+          const updatedReplies = [];
+          let repliesUpdated = false;
+          
+          for (let j = 0; j < comment.replies.length; j++) {
+            const reply = comment.replies[j];
+            let updatedReply = { ...reply };
+            
+            // 대댓글 author 필드 처리
+            if (!reply.author || reply.author !== reply.userName) {
+              const replyAuthorName = reply.userName || reply.author || "익명";
+              updatedReply.author = replyAuthorName;
+              repliesUpdated = true;
+              updatedCommentsCount++;
+              console.log(`✅ 답글 ${j + 1} author 필드 업데이트: ${reply.author || 'null'} → ${replyAuthorName}`);
+            }
+            
+            // 대댓글 authorUid 필드 처리
+            if (!reply.authorUid && reply.userUid) {
+              updatedReply.authorUid = reply.userUid;
+              repliesUpdated = true;
+              console.log(`✅ 답글 ${j + 1} authorUid 필드 추가: ${reply.userUid}`);
+            }
+            
+            // 대댓글 ID가 없는 경우 생성
+            if (!reply.id) {
+              updatedReply.id = `reply_${Date.now()}_${j}_${Math.random().toString(36).substr(2, 9)}`;
+              repliesUpdated = true;
+              console.log(`✅ 답글 ${j + 1} ID 추가: ${updatedReply.id}`);
+            }
+            
+            updatedReplies.push(updatedReply);
+          }
+          
+          if (repliesUpdated) {
+            updatedComment.replies = updatedReplies;
+            hasUpdates = true;
+          }
+        }
+        
+        updatedComments.push(updatedComment);
+      }
+      
+      // 업데이트가 있는 경우에만 Firestore 업데이트
+      if (hasUpdates) {
+        console.log(`노트 ${noteDoc.id} Firestore 업데이트 중...`);
+        try {
+          await updateDoc(doc(db, "notes", noteDoc.id), {
+            comment: updatedComments,
+            commentMigratedAt: serverTimestamp() // 마이그레이션 완료 시간 기록
+          });
+          updatedNotesCount++;
+          console.log(`✅ 노트 ${noteDoc.id} 댓글 닉네임 업데이트 완료`);
+        } catch (updateError) {
+          console.error(`노트 ${noteDoc.id} 업데이트 실패:`, updateError);
+        }
+      } else {
+        console.log(`노트 ${noteDoc.id}: 업데이트할 내용 없음`);
+      }
+    }
+    
+    console.log("=== 댓글 닉네임 업데이트 완료 ===");
+    console.log(`처리된 노트 수: ${processedNotesCount}`);
+    console.log(`업데이트된 노트 수: ${updatedNotesCount}`);
+    console.log(`업데이트된 댓글/답글 수: ${updatedCommentsCount}`);
+    
+    return {
+      updatedNotesCount,
+      updatedCommentsCount,
+      processedNotesCount
+    };
+    
+  } catch (error) {
+    console.error("=== 댓글 닉네임 업데이트 실패 ===");
+    console.error("에러 상세:", error);
+    console.error("에러 스택:", error.stack);
+    throw error;
+  }
+};
+
+// 기존 댓글들의 닉네임을 최신 사용자 정보로 업데이트하는 함수
+export const updateCommentsUserNames = async () => {
+  try {
+    console.log("=== 댓글 닉네임 업데이트 시작 ===");
+    
+    // 현재 사용자 확인
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    console.log("현재 사용자:", currentUser.email);
+    
+    // 모든 사용자 정보 가져오기 (최신 displayName 확인용)
+    console.log("사용자 컬렉션에서 데이터 가져오는 중...");
+    const usersQuery = query(collection(db, "users"));
+    const usersSnapshot = await getDocs(usersQuery);
+    
+    // 사용자 ID별 최신 displayName 매핑 생성
+    const userDisplayNames = {};
+    usersSnapshot.docs.forEach(userDoc => {
+      const userData = userDoc.data();
+      userDisplayNames[userDoc.id] = userData.displayName || "익명";
+    });
+    
+    console.log(`총 ${Object.keys(userDisplayNames).length}명의 사용자 정보를 가져왔습니다.`);
+    
+    // 모든 노트 가져오기
+    console.log("노트 컬렉션에서 데이터 가져오는 중...");
+    const notesQuery = query(collection(db, "notes"));
+    const notesSnapshot = await getDocs(notesQuery);
+    console.log(`총 ${notesSnapshot.docs.length}개의 노트를 찾았습니다.`);
+    
+    let updatedNotesCount = 0;
+    let updatedCommentsCount = 0;
+    let processedNotesCount = 0;
+    
+    for (const noteDoc of notesSnapshot.docs) {
+      processedNotesCount++;
+      console.log(`노트 ${processedNotesCount}/${notesSnapshot.docs.length} 처리 중... (ID: ${noteDoc.id})`);
+      
+      const noteData = noteDoc.data();
+      const comments = noteData.comment || [];
+      
+      if (comments.length === 0) {
+        console.log(`노트 ${noteDoc.id}: 댓글 없음, 건너뛰기`);
+        continue;
+      }
+      
+      console.log(`노트 ${noteDoc.id}: ${comments.length}개의 댓글 발견`);
+      
+      let hasUpdates = false;
+      const updatedComments = [];
+      
+      for (let i = 0; i < comments.length; i++) {
+        const comment = comments[i];
+        let updatedComment = { ...comment };
+        
+        // 댓글 작성자의 최신 닉네임 확인
+        const authorUid = comment.authorUid || comment.userUid;
+        if (authorUid && userDisplayNames[authorUid]) {
+          const latestDisplayName = userDisplayNames[authorUid];
+          
+          // 현재 댓글의 닉네임과 최신 닉네임이 다른 경우 업데이트
+          if (comment.author !== latestDisplayName || comment.userName !== latestDisplayName) {
+            console.log(`댓글 ${i + 1} 닉네임 업데이트:`, {
+              기존_author: comment.author,
+              기존_userName: comment.userName,
+              최신_displayName: latestDisplayName
+            });
+            
+            updatedComment.author = latestDisplayName;
+            updatedComment.userName = latestDisplayName;
+            hasUpdates = true;
+            updatedCommentsCount++;
+          }
+        }
+        
+        // 대댓글도 처리
+        if (comment.replies && Array.isArray(comment.replies)) {
+          const updatedReplies = [];
+          let repliesUpdated = false;
+          
+          for (let j = 0; j < comment.replies.length; j++) {
+            const reply = comment.replies[j];
+            let updatedReply = { ...reply };
+            
+            const replyAuthorUid = reply.authorUid || reply.userUid;
+            if (replyAuthorUid && userDisplayNames[replyAuthorUid]) {
+              const latestDisplayName = userDisplayNames[replyAuthorUid];
+              
+              if (reply.author !== latestDisplayName || reply.userName !== latestDisplayName) {
+                console.log(`답글 ${j + 1} 닉네임 업데이트:`, {
+                  기존_author: reply.author,
+                  기존_userName: reply.userName,
+                  최신_displayName: latestDisplayName
+                });
+                
+                updatedReply.author = latestDisplayName;
+                updatedReply.userName = latestDisplayName;
+                repliesUpdated = true;
+                updatedCommentsCount++;
+              }
+            }
+            
+            updatedReplies.push(updatedReply);
+          }
+          
+          if (repliesUpdated) {
+            updatedComment.replies = updatedReplies;
+            hasUpdates = true;
+          }
+        }
+        
+        updatedComments.push(updatedComment);
+      }
+      
+      // 업데이트가 있는 경우에만 Firestore 업데이트
+      if (hasUpdates) {
+        console.log(`노트 ${noteDoc.id} Firestore 업데이트 중...`);
+        try {
+          await updateDoc(doc(db, "notes", noteDoc.id), {
+            comment: updatedComments
+          });
+          updatedNotesCount++;
+          console.log(`✅ 노트 ${noteDoc.id} 댓글 닉네임 업데이트 완료`);
+        } catch (updateError) {
+          console.error(`노트 ${noteDoc.id} 업데이트 실패:`, updateError);
+        }
+      } else {
+        console.log(`노트 ${noteDoc.id}: 업데이트할 내용 없음`);
+      }
+    }
+    
+    console.log("=== 댓글 닉네임 업데이트 완료 ===");
+    console.log(`처리된 노트 수: ${processedNotesCount}`);
+    console.log(`업데이트된 노트 수: ${updatedNotesCount}`);
+    console.log(`업데이트된 댓글/답글 수: ${updatedCommentsCount}`);
+    
+    return {
+      updatedNotesCount,
+      updatedCommentsCount,
+      processedNotesCount
+    };
+    
+  } catch (error) {
+    console.error("=== 댓글 닉네임 업데이트 실패 ===");
+    console.error("에러 상세:", error);
+    console.error("에러 스택:", error.stack);
+    throw error;
+  }
+};
+
 // 브라우저 콘솔에서 테스트할 수 있도록 전역으로 노출
 if (typeof window !== 'undefined') {
   window.testFirestorePermissions = testFirestorePermissions;
@@ -1474,4 +1801,107 @@ if (typeof window !== 'undefined') {
   window.checkLikesUsersCollection = checkLikesUsersCollection;
   window.checkUserLikesHistory = checkUserLikesHistory;
   window.validateLikesConsistency = validateLikesConsistency;
+  window.updateCommentsUserNames = updateCommentsUserNames;
+  window.migrateCommentsToAuthorField = migrateCommentsToAuthorField;
 }
+
+// 댓글 시스템 테스트 함수
+export const testCommentSystem = async (noteId) => {
+  try {
+    console.log("=== 댓글 시스템 테스트 시작 ===");
+    
+    if (!noteId) {
+      throw new Error("노트 ID가 필요합니다.");
+    }
+    
+    // 현재 사용자 확인
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    
+    console.log("테스트 사용자:", currentUser.email);
+    console.log("테스트 노트 ID:", noteId);
+    
+    // 노트 정보 가져오기
+    const noteDocRef = doc(db, "notes", noteId);
+    const noteDoc = await getDoc(noteDocRef);
+    
+    if (!noteDoc.exists()) {
+      throw new Error("노트를 찾을 수 없습니다.");
+    }
+    
+    const noteData = noteDoc.data();
+    const comments = noteData.comment || [];
+    
+    console.log("현재 댓글 수:", comments.length);
+    console.log("댓글 구조 분석:");
+    
+    comments.forEach((comment, index) => {
+      console.log(`댓글 ${index + 1}:`, {
+        id: comment.id,
+        author: comment.author,
+        userName: comment.userName,
+        authorUid: comment.authorUid,
+        userUid: comment.userUid,
+        content: comment.content?.substring(0, 30) + "...",
+        replies: comment.replies?.length || 0,
+        replyCount: comment.replyCount
+      });
+      
+      // 대댓글 구조 분석
+      if (comment.replies && comment.replies.length > 0) {
+        comment.replies.forEach((reply, replyIndex) => {
+          console.log(`  답글 ${replyIndex + 1}:`, {
+            id: reply.id,
+            author: reply.author,
+            userName: reply.userName,
+            authorUid: reply.authorUid,
+            userUid: reply.userUid,
+            content: reply.content?.substring(0, 30) + "..."
+          });
+        });
+      }
+    });
+    
+    // 테스트 댓글 작성
+    console.log("테스트 댓글 작성 중...");
+    const testCommentContent = `테스트 댓글 - ${new Date().toLocaleString()}`;
+    
+    await addCommentToNote(noteId, testCommentContent);
+    console.log("✅ 테스트 댓글 작성 완료");
+    
+    // 업데이트된 댓글 확인
+    const updatedNoteDoc = await getDoc(noteDocRef);
+    const updatedNoteData = updatedNoteDoc.data();
+    const updatedComments = updatedNoteData.comment || [];
+    
+    console.log("업데이트된 댓글 수:", updatedComments.length);
+    
+    // 최신 댓글 구조 확인
+    const latestComment = updatedComments[updatedComments.length - 1];
+    console.log("최신 댓글 구조:", {
+      id: latestComment.id,
+      author: latestComment.author,
+      userName: latestComment.userName,
+      authorUid: latestComment.authorUid,
+      content: latestComment.content,
+      replies: latestComment.replies,
+      replyCount: latestComment.replyCount,
+      createdAt: latestComment.createdAt
+    });
+    
+    console.log("=== 댓글 시스템 테스트 완료 ===");
+    
+    return {
+      success: true,
+      totalComments: updatedComments.length,
+      latestComment: latestComment
+    };
+    
+  } catch (error) {
+    console.error("=== 댓글 시스템 테스트 실패 ===");
+    console.error("에러 상세:", error);
+    throw error;
+  }
+};

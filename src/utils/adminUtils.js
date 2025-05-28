@@ -1046,6 +1046,46 @@ export const dataMigration = {
       console.error('마이그레이션 상태 확인 실패:', error);
       throw error;
     }
+  },
+
+  // 댓글 닉네임 업데이트
+  async migrateCommentUserNames() {
+    try {
+      console.log('댓글 닉네임 업데이트 시작...');
+      
+      // firebaseNoteDataUtil에서 함수 가져오기
+      const { updateCommentsUserNames } = await import('@/utils/firebaseNoteDataUtil');
+      const result = await updateCommentsUserNames();
+      
+      return {
+        success: true,
+        updatedCommentsCount: result.updatedCommentsCount || 0,
+        updatedNotesCount: result.updatedNotesCount || 0
+      };
+    } catch (error) {
+      console.error('댓글 닉네임 업데이트 실패:', error);
+      throw error;
+    }
+  },
+
+  // 댓글 Author 필드 마이그레이션
+  async migrateCommentAuthor() {
+    try {
+      console.log('댓글 Author 필드 마이그레이션 시작...');
+      
+      // firebaseNoteDataUtil에서 함수 가져오기
+      const { migrateCommentsToAuthorField } = await import('@/utils/firebaseNoteDataUtil');
+      const result = await migrateCommentsToAuthorField();
+      
+      return {
+        success: true,
+        updatedCommentsCount: result.updatedCommentsCount || 0,
+        updatedNotesCount: result.updatedNotesCount || 0
+      };
+    } catch (error) {
+      console.error('댓글 Author 필드 마이그레이션 실패:', error);
+      throw error;
+    }
   }
 };
 

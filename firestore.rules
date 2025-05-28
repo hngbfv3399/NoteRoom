@@ -132,7 +132,10 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'lastSearched']) ||
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'searchCount']) ||
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSearched', 'searchCount']) ||
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'lastSearched', 'searchCount']))
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['searchKeywords', 'lastSearched', 'searchCount'])) ||
+        
+        // 5. 관리자 권한: 댓글 마이그레이션 및 데이터 정리 작업
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comment']))
       );
       
       // 삭제: 작성자만 가능

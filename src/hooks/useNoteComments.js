@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, updateDoc, arrayUnion, increment } from "firebase/firestore";
 import { db, auth } from "@/services/firebase";
 
 export function useNoteComments(noteId) {
@@ -40,19 +40,26 @@ export function useAddComment() {
       if (!currentUser) throw new Error("로그인이 필요합니다.");
       if (!content?.trim()) throw new Error("댓글 내용을 입력해주세요.");
       
+      // 🔥 Firestore에서 최신 사용자 정보 가져오기
+      const userDocRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      
       const newComment = {
-        id: Date.now().toString(),
+        id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
         content: content.trim(),
-        userName: currentUser.displayName || "익명", // 기존 필드명 사용
-        author: currentUser.displayName || "익명",   // 호환성을 위한 추가 필드
-        authorUid: currentUser.uid,
+        author: userData?.displayName || "익명", // author 필드 사용
+        userName: userData?.displayName || "익명", // 호환성을 위해 유지
+        authorUid: currentUser.uid, // authorUid 필드 사용
         createdAt: new Date(),
-        replies: []
+        replies: [], // 대댓글 배열 초기화
+        replyCount: 0 // 대댓글 수 초기화
       };
       
       const noteRef = doc(db, "notes", noteId);
       await updateDoc(noteRef, {
-        comment: arrayUnion(newComment)
+        comment: arrayUnion(newComment),
+        commentCount: increment(1) // 댓글 카운트 증가
       });
       
       return newComment;
@@ -66,8 +73,6 @@ export function useAddComment() {
       
       // 노트 상세 캐시도 무효화
       queryClient.invalidateQueries({ queryKey: ["noteDetail", noteId] });
-      
-
     }
   });
 }
@@ -85,6 +90,11 @@ export function useAddReply() {
       const noteDoc = await getDoc(doc(db, "notes", noteId));
       if (!noteDoc.exists()) throw new Error("노트를 찾을 수 없습니다.");
       
+      // 🔥 Firestore에서 최신 사용자 정보 가져오기
+      const userDocRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      const userData = userDoc.data();
+      
       const noteData = noteDoc.data();
       const comments = noteData.comment || [];
       
@@ -93,11 +103,11 @@ export function useAddReply() {
       if (commentIndex === -1) throw new Error("댓글을 찾을 수 없습니다.");
       
       const newReply = {
-        id: Date.now().toString(),
+        id: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 고유 ID 생성
         content: content.trim(),
-        userName: currentUser.displayName || "익명", // 기존 필드명 사용
-        author: currentUser.displayName || "익명",   // 호환성을 위한 추가 필드
-        authorUid: currentUser.uid,
+        author: userData?.displayName || "익명", // author 필드 사용
+        userName: userData?.displayName || "익명", // 호환성을 위해 유지
+        authorUid: currentUser.uid, // authorUid 필드 사용
         createdAt: new Date()
       };
       
@@ -108,7 +118,10 @@ export function useAddReply() {
       }
       updatedComments[commentIndex].replies.push(newReply);
       
-      // Firestore 업데이트
+      // replyCount 업데이트
+      updatedComments[commentIndex].replyCount = updatedComments[commentIndex].replies.length;
+      
+      // Firestore 업데이트 (답글은 댓글 카운트에 포함되지 않음)
       const noteRef = doc(db, "notes", noteId);
       await updateDoc(noteRef, {
         comment: updatedComments
@@ -134,8 +147,6 @@ export function useAddReply() {
       
       // 노트 상세 캐시도 무효화
       queryClient.invalidateQueries({ queryKey: ["noteDetail", noteId] });
-      
-
     }
   });
 } 

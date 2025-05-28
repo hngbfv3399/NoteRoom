@@ -253,6 +253,61 @@ function SystemSettings() {
     }
   };
 
+  // 댓글 닉네임 업데이트
+  const handleCommentsUserNamesUpdate = async () => {
+    if (!confirm('댓글 닉네임을 업데이트하시겠습니까? 모든 댓글과 답글의 닉네임을 최신 사용자 정보로 업데이트합니다.')) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await dataMigration.migrateCommentUserNames();
+      alert(`댓글 닉네임 업데이트 완료! ${result.updatedCommentsCount}개의 댓글이 업데이트되었습니다.`);
+    } catch (error) {
+      console.error('댓글 닉네임 업데이트 실패:', error);
+      alert('업데이트 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 댓글 Author 필드 마이그레이션
+  const handleCommentsAuthorMigration = async () => {
+    if (!confirm('댓글 Author 필드를 마이그레이션하시겠습니까? 모든 댓글과 답글을 author 필드 구조로 마이그레이션합니다.')) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const result = await dataMigration.migrateCommentAuthor();
+      alert(`댓글 Author 필드 마이그레이션 완료! ${result.updatedCommentsCount}개의 댓글이 업데이트되었습니다.`);
+    } catch (error) {
+      console.error('댓글 Author 필드 마이그레이션 실패:', error);
+      alert('마이그레이션 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 댓글 시스템 테스트
+  const handleCommentSystemTest = async () => {
+    const noteId = prompt('테스트할 노트 ID를 입력하세요:');
+    if (!noteId) return;
+
+    setSaving(true);
+    try {
+      const { testCommentSystem } = await import('@/utils/firebaseNoteDataUtil');
+      const result = await testCommentSystem(noteId);
+      
+      alert(`댓글 시스템 테스트 완료!\n총 댓글 수: ${result.totalComments}\n최신 댓글 작성자: ${result.latestComment.author}\n\n자세한 내용은 브라우저 콘솔을 확인하세요.`);
+    } catch (error) {
+      console.error('댓글 시스템 테스트 실패:', error);
+      alert('테스트 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabs = [
     { id: 'security', title: '보안 정책', icon: FiShield },
     { id: 'maintenance', title: '서비스 점검', icon: FiSettings },
@@ -779,6 +834,75 @@ function SystemSettings() {
                 </button>
                 <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
                   ⚠️ 이 작업은 되돌릴 수 없습니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 댓글 닉네임 업데이트 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                댓글 닉네임 업데이트
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                모든 댓글과 답글의 닉네임을 최신 사용자 정보로 업데이트합니다.
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleCommentsUserNamesUpdate}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-orange-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '업데이트 중...' : '댓글 닉네임 업데이트 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  💡 안전한 작업입니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 댓글 Author 필드 마이그레이션 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                댓글 Author 필드 마이그레이션
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                모든 댓글과 답글을 author 필드 구조로 마이그레이션합니다.
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleCommentsAuthorMigration}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-indigo-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '마이그레이션 중...' : '댓글 Author 필드 마이그레이션 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  ⚠️ 이 작업은 되돌릴 수 없습니다.
+                </span>
+              </div>
+            </div>
+
+            {/* 댓글 시스템 테스트 */}
+            <div className={`p-4 rounded-lg border ${currentTheme?.inputBg || 'bg-gray-50'} ${currentTheme?.inputBorder || 'border-gray-200'}`}>
+              <h4 className={`font-medium mb-3 ${currentTheme?.textColor || 'text-gray-900'}`}>
+                댓글 시스템 테스트
+              </h4>
+              <p className={`text-sm mb-4 ${currentTheme?.textColor || 'text-gray-600'}`}>
+                특정 노트의 댓글 시스템을 테스트하고 구조를 분석합니다.
+              </p>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleCommentSystemTest}
+                  disabled={saving}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${currentTheme?.buttonBg || 'bg-teal-500'} ${currentTheme?.buttonText || 'text-white'} hover:opacity-90 disabled:opacity-50`}
+                >
+                  <FiSettings className="w-4 h-4" />
+                  <span>{saving ? '테스트 중...' : '댓글 시스템 테스트 실행'}</span>
+                </button>
+                <span className={`text-sm ${currentTheme?.textColor || 'text-gray-500'}`}>
+                  🧪 테스트 댓글이 작성됩니다.
                 </span>
               </div>
             </div>

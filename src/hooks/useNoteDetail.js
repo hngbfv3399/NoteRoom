@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { doc, getDoc, setDoc, deleteDoc, updateDoc, increment } from "firebase/firestore";
-import { db, auth } from "@/services/firebase";
+import { db, auth, retryFirebaseOperation } from "@/services/firebase";
 
 export function useNoteDetail(noteId) {
   return useQuery({
@@ -42,7 +42,7 @@ export function useNoteLike(noteId) {
       if (!currentUser || !noteId) return { liked: false, count: 0 };
       
       const [likeDoc, noteDoc] = await Promise.all([
-        getDoc(doc(db, "notes", noteId, "likes", currentUser.uid)),
+        getDoc(doc(db, "notes", noteId, "likesUsers", currentUser.uid)),
         getDoc(doc(db, "notes", noteId))
       ]);
       
@@ -60,23 +60,27 @@ export function useNoteLike(noteId) {
     mutationFn: async ({ liked }) => {
       if (!currentUser || !noteId) throw new Error("로그인이 필요합니다.");
       
-      const likeDocRef = doc(db, "notes", noteId, "likes", currentUser.uid);
-      const noteDocRef = doc(db, "notes", noteId);
+      const operation = async () => {
+        const likeDocRef = doc(db, "notes", noteId, "likesUsers", currentUser.uid);
+        const noteDocRef = doc(db, "notes", noteId);
+        
+        if (liked) {
+          // 좋아요 취소
+          await deleteDoc(likeDocRef);
+          await updateDoc(noteDocRef, { likes: increment(-1) });
+        } else {
+          // 좋아요 추가
+          await setDoc(likeDocRef, { 
+            userId: currentUser.uid,
+            createdAt: new Date()
+          });
+          await updateDoc(noteDocRef, { likes: increment(1) });
+        }
+        
+        return !liked;
+      };
       
-      if (liked) {
-        // 좋아요 취소
-        await deleteDoc(likeDocRef);
-        await updateDoc(noteDocRef, { likes: increment(-1) });
-      } else {
-        // 좋아요 추가
-        await setDoc(likeDocRef, { 
-          userId: currentUser.uid,
-          createdAt: new Date()
-        });
-        await updateDoc(noteDocRef, { likes: increment(1) });
-      }
-      
-      return !liked;
+      return await retryFirebaseOperation(operation);
     },
     onSuccess: (newLikedState) => {
       // 캐시 업데이트
@@ -91,6 +95,11 @@ export function useNoteLike(noteId) {
         ...old,
         likes: old.likes + (newLikedState ? 1 : -1)
       }));
+    },
+    onError: (error) => {
+      console.error("좋아요 처리 실패:", error);
+      // 에러 발생 시 사용자에게 알림
+      alert("좋아요 처리 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.");
     }
   });
   

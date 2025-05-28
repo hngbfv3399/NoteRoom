@@ -229,7 +229,7 @@ const CommentSection = ({ noteId }) => {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-2">
                   <span className={`font-medium ${currentTheme?.textColor || 'text-gray-900'}`}>
-                    {comment.userName || comment.author || "익명"}
+                    {comment.author || comment.userName || "익명"}
                   </span>
                   <span className={`text-sm ${currentTheme?.textSecondary || 'text-gray-500'}`}>
                     {formatDate(comment.createdAt)}
@@ -309,7 +309,7 @@ const CommentSection = ({ noteId }) => {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
                           <span className={`font-medium text-sm ${currentTheme?.textColor || 'text-gray-900'}`}>
-                            {reply.userName || reply.author || "익명"}
+                            {reply.author || reply.userName || "익명"}
                           </span>
                           <span className={`text-xs ${currentTheme?.textSecondary || 'text-gray-500'}`}>
                             {formatDate(reply.createdAt)}

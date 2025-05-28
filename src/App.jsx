@@ -5,6 +5,7 @@ import LoadingPage from "./components/LoadingPage";
 import MaintenancePage from "./components/MaintenancePage";
 import ToastNotification from "./components/ToastNotification";
 import OfflineIndicator from "./components/OfflineIndicator";
+import NetworkStatus from "./components/NetworkStatus";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./services/firebase";
@@ -82,6 +83,7 @@ function App() {
   if (isMaintenanceMode && !isAdmin) {
     return (
       <BrowserRouter>
+        <NetworkStatus />
         <OfflineIndicator />
         <MaintenancePage />
         <ToastNotification />
@@ -92,6 +94,8 @@ function App() {
   return (
     //user가 활성화가 된다면 
     <BrowserRouter>
+      {/* 네트워크 상태 모니터링 */}
+      <NetworkStatus />
       {/* 오프라인 상태 표시 */}
       <OfflineIndicator />
       {user ? <MainLayout /> : <LoginPage />}
