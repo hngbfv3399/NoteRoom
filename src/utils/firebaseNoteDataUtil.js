@@ -246,7 +246,7 @@ const FIELD_SETS = {
   // 상세 페이지 - 모든 필드
   detail: null, // null이면 모든 필드
   // 프로필 페이지 - 사용자 노트 목록용
-  profile: ['title', 'category', 'image', 'createdAt', 'views', 'likes', 'commentCount']
+  profile: ['title', 'content', 'category', 'image', 'createdAt', 'views', 'likes', 'commentCount', 'userUid', 'userId', 'author', 'authorName']
 };
 
 // 🚀 개선된 서버 사이드 필터링 함수
@@ -372,11 +372,6 @@ export const loadNotesPageOptimized = async (
       // 사용자 필터링
       if (userId) {
         notes = notes.filter(note => note.userUid === userId || note.userId === userId);
-        console.log('👤 [Client Filter] 사용자:', {
-          before: notes.length,
-          after: notes.length,
-          userId
-        });
       }
     }
     
@@ -521,14 +516,8 @@ export const loadNotesPage = async (
 
     // 클라이언트 사이드에서 userId 필터링
     if (userId) {
-      const beforeFilter = notes.length;
       notes = notes.filter(note => note.userUid === userId || note.userId === userId);
       notes = notes.slice(0, pageSize);
-      console.log('👤 [Filter] userId 필터링:', {
-        before: beforeFilter,
-        after: notes.length,
-        userId
-      });
     }
 
     // 클라이언트 사이드에서 카테고리 필터링

@@ -271,8 +271,8 @@ function UserProfile() {
             notes={notes}
             isOwnProfile={isOwnProfile}
             onNoteClick={handleNoteClick}
-            onEditNote={handleEditNote}
-            onDeleteNote={handleDeleteNote}
+            onNoteEdit={handleEditNote}
+            onNoteDelete={handleDeleteNote}
           />
         </div>
       </div>

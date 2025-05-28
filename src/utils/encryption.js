@@ -138,6 +138,18 @@ export const decryptEmotionArray = async (emotions, userUid) => {
   
   const decryptedEmotions = await Promise.all(
     emotions.map(async (emotion) => {
+      // 감정 일기의 content 필드 복호화
+      if (emotion.content && emotion.encrypted) {
+        console.log('🔓 [복호화] 시도:', emotion.content);
+        const decryptedContent = await decryptEmotionNote(emotion.content, userUid);
+        console.log('✅ [복호화] 완료:', decryptedContent);
+        return {
+          ...emotion,
+          content: decryptedContent,
+          encrypted: false // 복호화 플래그
+        };
+      }
+      // 기존 note 필드도 지원 (하위 호환성)
       if (emotion.note && emotion.encrypted) {
         return {
           ...emotion,

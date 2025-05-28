@@ -1,370 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent } from "@tiptap/react";
 import MenuBar from "./MenuBar";
 import ButtonLayout from "./ButtonLayout";
 import "@/styles/WriteEditerStyle.css";
 import LoadingPage from "@/components/LoadingPage";
-import ThemedButton from "@/components/ui/ThemedButton";
 import { useSelector } from 'react-redux';
 
-// 🚀 에디터 확장들을 동적으로 로드
-const loadEditorExtensions = async () => {
-  const { createEditorExtensions } = await import('./editorExtensions');
-  return createEditorExtensions();
-};
-
-const categories = [
-  "일상",
-  "기술",
-  "여행",
-  "음식",
-  "영화/드라마",
-  "음악",
-  "독서",
-  "취미",
-  "기타",
-];
-
-function ImageResizeControls({ editor }) {
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [showControls, setShowControls] = useState(false);
-  const [imageSize, setImageSize] = useState({ width: '', height: '' });
-  const [alignment, setAlignment] = useState('center');
-
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleImageClick = (event) => {
-      const clickedImage = event.target.closest('.ProseMirror img');
-      if (clickedImage) {
-        const { state } = editor;
-        const { doc } = state;
-        let imageNode = null;
-        let imagePos = null;
-
-        // 현재 문서에서 클릭된 이미지 노드 찾기
-        doc.descendants((node, pos) => {
-          if (node.type.name === 'image') {
-            const domNode = editor.view.nodeDOM(pos);
-            if (domNode === clickedImage) {
-              imageNode = node;
-              imagePos = pos;
-              return false;
-            }
-          }
-          return true;
-        });
-
-        if (imageNode && imagePos !== null) {
-          setSelectedImage({ pos: imagePos, node: imageNode });
-          setImageSize({
-            width: imageNode.attrs.width || "300px",
-            height: imageNode.attrs.height || "auto",
-          });
-          setShowControls(true);
-          
-          // 이미지를 선택 상태로 만들기
-          editor.chain().focus().setNodeSelection(imagePos).run();
-        }
-      }
-    };
-
-    const handleClickOutside = (event) => {
-      const isClickedOnControls = event.target.closest('.image-controls');
-      const isClickedOnImage = event.target.closest('.ProseMirror img');
-      
-      if (!isClickedOnControls && !isClickedOnImage) {
-        setShowControls(false);
-      }
-    };
-
-    // 에디터 내용 변경 시 선택 상태 업데이트
-    const handleUpdate = () => {
-      if (!showControls) return;
-
-      const { state } = editor;
-      const { selection } = state;
-      const node = selection.$anchor.nodeAfter || selection.$anchor.nodeBefore;
-
-      if (!node || node.type.name !== 'image') {
-        setShowControls(false);
-        return;
-      }
-
-      // 현재 선택된 이미지의 크기 정보 업데이트
-      setImageSize({
-        width: node.attrs.width || "300px",
-        height: node.attrs.height || "auto",
-      });
-    };
-
-    // 이미지 업로드 후 이벤트 처리
-    const handleImageSelected = (event) => {
-      const { pos, node } = event.detail;
-      
-      if (!node || !node.attrs) {
-      
-        return;
-      }
-
-      try {
-        setSelectedImage({ pos, node });
-        setImageSize({
-          width: node.attrs.width || "300px",
-          height: node.attrs.height || "auto",
-        });
-        setShowControls(true);
-      } catch (error) {
-        console.error("이미지 선택 처리 중 오류:", error);
-        setShowControls(false);
-      }
-    };
-
-    // 이벤트 리스너 등록
-    const editorElement = editor.view.dom;
-    editorElement.addEventListener('click', handleImageClick);
-    document.addEventListener('click', handleClickOutside);
-    editor.on('update', handleUpdate);
-    window.addEventListener('imageSelected', handleImageSelected);
-
-    return () => {
-      editorElement.removeEventListener('click', handleImageClick);
-      document.removeEventListener('click', handleClickOutside);
-      editor.off('update', handleUpdate);
-      window.removeEventListener('imageSelected', handleImageSelected);
-    };
-  }, [editor, showControls]);
-
-  const handleSizeChange = (dimension, value) => {
-    let processedValue = value;
-    if (value.match(/^\d+$/)) {
-      processedValue = `${value}px`;
-    }
-    setImageSize(prev => ({
-      ...prev,
-      [dimension]: processedValue,
-    }));
-  };
-
-  const applySize = () => {
-    if (!selectedImage || !editor) return;
-
-    try {
-      const { pos } = selectedImage;
-      editor
-        .chain()
-        .focus()
-        .setNodeSelection(pos)
-        .updateAttributes('image', {
-          width: imageSize.width || "300px",
-          height: imageSize.height || "auto",
-        })
-        .run();
-    } catch (error) {
-      console.error("이미지 크기 변경 중 오류:", error);
-      alert("이미지 크기 변경에 실패했습니다.");
-    }
-  };
-
-  const handleReset = () => {
-    const defaultSize = { width: "300px", height: "auto" };
-    setImageSize(defaultSize);
-    
-    if (selectedImage && editor) {
-      try {
-        const { pos } = selectedImage;
-        editor
-          .chain()
-          .focus()
-          .setNodeSelection(pos)
-          .updateAttributes('image', defaultSize)
-          .run();
-      } catch (error) {
-        console.error("이미지 크기 초기화 중 오류:", error);
-        alert("이미지 크기 초기화에 실패했습니다.");
-      }
-    }
-  };
-
-  const handleAlignmentChange = (alignment) => {
-    if (!selectedImage || !editor) return;
-
-    try {
-      const { pos } = selectedImage;
-      editor
-        .chain()
-        .focus()
-        .setNodeSelection(pos)
-        .updateAttributes('image', {
-          alignment: alignment,
-        })
-        .run();
-      setAlignment(alignment);
-    } catch (error) {
-      console.error("이미지 정렬 변경 중 오류:", error);
-    }
-  };
-
-  if (!showControls) return null;
-
-  return (
-    <div 
-      className={`image-controls flex flex-col sm:flex-row items-start sm:items-center gap-2 p-3 border-2 rounded-lg mb-4 shadow-sm`}
-    >
-      <div className="flex flex-col sm:flex-row gap-2 w-full">
-        <div className="flex items-center gap-2">
-          <span 
-            className={`font-medium whitespace-nowrap`}
-          >
-            이미지 크기:
-          </span>
-          <div className="flex items-center gap-1">
-            <input
-              type="text"
-              placeholder="너비 (px/%)"
-              value={imageSize.width}
-              onChange={(e) => handleSizeChange("width", e.target.value)}
-              className={`w-24 p-2 border rounded-md transition-all focus:outline-none focus:ring-2`}
-            />
-            <span className={``}>×</span>
-            <input
-              type="text"
-              placeholder="높이 (px/%)"
-              value={imageSize.height}
-              onChange={(e) => handleSizeChange("height", e.target.value)}
-              className={`w-24 p-2 border rounded-md transition-all focus:outline-none focus:ring-2`}
-            />
-          </div>
-          <div className="flex gap-2">
-            <ThemedButton onClick={applySize} className="px-3 py-1">
-              적용
-            </ThemedButton>
-            <ThemedButton onClick={handleReset} className="px-3 py-1">
-              기본값
-            </ThemedButton>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2 ml-4">
-          <span 
-            className={`font-medium whitespace-nowrap`}
-          >
-            정렬:
-          </span>
-          <div className="flex gap-1">
-            <ThemedButton
-              onClick={() => handleAlignmentChange('left')}
-              className={`px-2 py-1 ${alignment === 'left' ? 'ring-2' : ''}`}
-              title="왼쪽 정렬"
-            >
-              ⬅️
-            </ThemedButton>
-            <ThemedButton
-              onClick={() => handleAlignmentChange('center')}
-              className={`px-2 py-1 ${alignment === 'center' ? 'ring-2' : ''}`}
-              title="가운데 정렬"
-            >
-              ↔️
-            </ThemedButton>
-            <ThemedButton
-              onClick={() => handleAlignmentChange('right')}
-              className={`px-2 py-1 ${alignment === 'right' ? 'ring-2' : ''}`}
-              title="오른쪽 정렬"
-            >
-              ➡️
-            </ThemedButton>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TitleInput({ title, setTitle }) {
-  return (
-    <div className="mb-6">
-      <input
-        type="text"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="멋진 제목을 입력해보세요..."
-        className="w-full p-4 font-bold rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-4 placeholder-opacity-50"
-        maxLength={100}
-      />
-      <div className="flex justify-between items-center mt-2">
-        <p className="opacity-60">
-          제목은 독자의 첫인상을 결정합니다
-        </p>
-        <span className="opacity-50">
-          {title.length}/100
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function CategorySelect({ selectedCategory, handleChange }) {
-  const categoryIcons = {
-    "일상": "📝",
-    "여행": "✈️",
-    "운동": "💪",
-    "공부": "📖",
-    "업무": "💼",
-    "음식": "🍽️",
-    "영화/드라마": "🎬",
-    "음악": "🎵",
-    "독서": "📚",
-    "취미": "🎨",
-    "기타": "📝"
-  };
-
-  return (
-    <div className="mb-8">
-      <label 
-        htmlFor="category-select" 
-        className="block font-semibold mb-3"
-      >
-        카테고리 선택
-      </label>
-      
-      {/* 카테고리 스크롤 목록 */}
-      <div className="overflow-x-auto hide-scrollbar">
-        <div className="flex gap-3 pb-2 min-w-max">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => handleChange({ target: { value: cat } })}
-              className={`flex-shrink-0 p-3 rounded-xl border-2 transition-all duration-200 hover:scale-105 min-w-[80px] ${
-                selectedCategory === cat
-                  ? "border-transparent shadow-lg"
-                  : ""
-              }`}
-            >
-              <div className="mb-1">{categoryIcons[cat]}</div>
-              <div className="font-medium text-sm whitespace-nowrap">{cat}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 선택된 카테고리 표시 */}
-      {selectedCategory && (
-        <div className="p-3 rounded-lg mt-4">
-          <p>
-            <span className="font-medium">선택된 카테고리:</span> {categoryIcons[selectedCategory]} {selectedCategory}
-          </p>
-        </div>
-      )}
-      
-      {!selectedCategory && (
-        <p className="opacity-60 mt-4">
-          노트의 주제에 맞는 카테고리를 선택해주세요
-        </p>
-      )}
-    </div>
-  );
-}
+// 분리된 컴포넌트들 import
+import ImageResizeControls from './components/ImageResizeControls';
+import TitleInput from './components/TitleInput';
+import CategorySelect from './components/CategorySelect';
+import { loadEditorExtensions } from './utils/editorUtils';
 
 function EditorController({ onEditorReady, setTitle, title, selectedCategory, handleChange }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -378,9 +24,13 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
     const initializeExtensions = async () => {
       try {
         const extensions = await loadEditorExtensions();
+        console.log('에디터 확장 로드 완료:', extensions);
         setEditorExtensions(extensions);
       } catch (error) {
         console.error('에디터 확장 로드 실패:', error);
+        // 폴백으로 기본 StarterKit 사용
+        const StarterKit = await import('@tiptap/starter-kit');
+        setEditorExtensions([StarterKit.default]);
       }
     };
 
@@ -415,48 +65,78 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
     };
   }, []);
 
-  const editor = useEditor({
-    extensions: editorExtensions || [], // 확장들이 로드될 때까지 빈 배열 사용
-    editorProps: {
-      attributes: {
-        class: `prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none`,
-        spellcheck: 'false',
-        'data-testid': 'editor-content',
-      },
-      handleDOMEvents: {
-        // 드래그 앤 드롭 이벤트만 처리하고 텍스트 입력 관련 이벤트는 제거
-        dragenter: () => {
-          // 기본 동작을 방지하지 않고 버블링 허용
-          return false;
-        },
-        dragover: () => {
-          // 기본 동작을 방지하지 않고 버블링 허용
-          return false;
-        },
-        dragleave: () => {
-          // 기본 동작을 방지하지 않고 버블링 허용
-          return false;
-        },
-        drop: (_view, event) => {
-          // 이미지 파일이 아닌 경우에만 기본 동작을 방지하지 않고 버블링 허용
-          const files = event.dataTransfer?.files;
-          if (files && files[0] && files[0].type.startsWith('image/')) {
-            // 이미지 파일인 경우 전역 핸들러가 처리하도록 버블링 허용
-            return false;
-          }
-          // 텍스트나 다른 파일인 경우 에디터가 처리하도록 함
-          return false;
-        },
-      },
-    },
-    onSelectionUpdate: () => {
-      // 선택 상태 변경 시 처리 (디버깅 로그 제거)
-    },
-    // 에디터 업데이트 시 디버깅 로그 추가
-    onUpdate: ({ editor: updatedEditor }) => {
-      console.log('에디터 업데이트:', updatedEditor.getHTML());
-    },
-  }, [editorExtensions]); // editorExtensions가 변경될 때 에디터 재생성
+  // 에디터 상태 관리
+  const [editor, setEditor] = useState(null);
+
+  // 에디터 초기화
+  useEffect(() => {
+    if (!editorExtensions || !isMounted) return;
+
+    console.log('에디터 초기화 시작...');
+    
+    try {
+      // Editor 클래스를 직접 import하여 사용
+      import('@tiptap/react').then(({ Editor }) => {
+        const newEditor = new Editor({
+          extensions: editorExtensions,
+          editorProps: {
+            attributes: {
+              class: `prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none`,
+              spellcheck: 'false',
+              'data-testid': 'editor-content',
+            },
+            handleDOMEvents: {
+              // 드래그 앤 드롭 이벤트만 처리하고 텍스트 입력 관련 이벤트는 제거
+              dragenter: () => {
+                // 기본 동작을 방지하지 않고 버블링 허용
+                return false;
+              },
+              dragover: () => {
+                // 기본 동작을 방지하지 않고 버블링 허용
+                return false;
+              },
+              dragleave: () => {
+                // 기본 동작을 방지하지 않고 버블링 허용
+                return false;
+              },
+              drop: (_view, event) => {
+                // 이미지 파일이 아닌 경우에만 기본 동작을 방지하지 않고 버블링 허용
+                const files = event.dataTransfer?.files;
+                if (files && files[0] && files[0].type.startsWith('image/')) {
+                  // 이미지 파일인 경우 전역 핸들러가 처리하도록 버블링 허용
+                  return false;
+                }
+                // 텍스트나 다른 파일인 경우 에디터가 처리하도록 함
+                return false;
+              },
+            },
+          },
+          onSelectionUpdate: () => {
+            // 선택 상태 변경 시 처리 (디버깅 로그 제거)
+          },
+          // 에디터 업데이트 시 디버깅 로그 추가
+          onUpdate: ({ editor: updatedEditor }) => {
+            console.log('에디터 업데이트:', updatedEditor.getHTML());
+          },
+        });
+
+        console.log('에디터 생성 완료:', newEditor);
+        setEditor(newEditor);
+      }).catch(error => {
+        console.error('에디터 생성 실패:', error);
+      });
+    } catch (error) {
+      console.error('에디터 초기화 실패:', error);
+    }
+
+    // 클린업
+    return () => {
+      if (editor) {
+        console.log('에디터 정리 중...');
+        editor.destroy();
+      }
+    };
+  }, [editorExtensions, isMounted]);
 
   useEffect(() => {
     if (editor && isMounted && editorExtensions) {
@@ -466,7 +146,7 @@ function EditorController({ onEditorReady, setTitle, title, selectedCategory, ha
   }, [editor, isMounted, onEditorReady, editorExtensions]);
 
   // 확장들이 로드되지 않았거나 에디터가 로딩 중일 때
-  if (isLoading || !editorExtensions) {
+  if (isLoading || !editorExtensions || !editor) {
     return <LoadingPage />;
   }
 

@@ -6,8 +6,7 @@ import App from './App.jsx';
 import './styles/index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import './utils/performanceMonitor.js'; // 성능 모니터링 초기화
-import './utils/autoPerformanceTest.js'; // 자동 성능 테스트 시스템
+
 
 const queryClient = new QueryClient({
   defaultOptions: {

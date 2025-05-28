@@ -9,7 +9,7 @@
  */
 import React, { useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
-import { doc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db, auth } from '@/services/firebase';
 import { EMOTION_TYPES, EMOTION_META } from '@/utils/emotionConstants';
 import { getModalThemeClass } from '@/utils/themeHelper';
@@ -74,26 +74,9 @@ function EmotionDiaryModal({ isOpen, onClose, onDiarySaved }) {
 
       const userRef = doc(db, 'users', auth.currentUser.uid);
       
-      // 현재 사용자 데이터 가져오기
-      const userDoc = await getDoc(userRef);
-      if (!userDoc.exists()) {
-        throw new Error('사용자 정보를 찾을 수 없습니다.');
-      }
-
-      const userData = userDoc.data();
-      const currentEmotionTracking = userData.emotionTracking || { 
-        dailyEmotions: [], 
-        settings: { reminderTime: "21:00", reminderEnabled: true } 
-      };
-
-      // 일기 추가 (무제한)
-      const updatedEmotionTracking = {
-        ...currentEmotionTracking,
-        dailyEmotions: arrayUnion(diaryEntry)
-      };
-
+      // arrayUnion을 사용해서 감정 일기를 배열에 추가 (덮어쓰기 없이 계속 추가)
       await updateDoc(userRef, {
-        emotionTracking: updatedEmotionTracking
+        'emotionTracking.dailyEmotions': arrayUnion(diaryEntry)
       });
 
       // 성공 콜백 호출

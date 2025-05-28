@@ -68,8 +68,11 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
         emotion: selectedEmotion,
         intensity,
         note: note.trim(),
-        timestamp: now.toISOString()
+        timestamp: now.toISOString(),
+        type: 'representative' // 대표 감정 타입 추가
       };
+      
+      console.log('💾 [EmotionSelection] 저장할 감정 데이터:', emotionEntry);
 
       const userRef = doc(db, 'users', auth.currentUser.uid);
       
@@ -81,25 +84,31 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
 
       const userData = userDoc.data();
       
-      // 감정 분포 업데이트 준비
+      // 하이브리드 시스템: emotionDistribution도 함께 업데이트
       const currentEmotionDistribution = userData.emotionDistribution || {};
       const updatedEmotionDistribution = {
         ...currentEmotionDistribution,
-        [selectedEmotion]: intensity
+        [selectedEmotion]: intensity // 최신 강도로 업데이트
       };
-
+      
       // 감정 추적 업데이트 준비
       const currentEmotionTracking = userData.emotionTracking || { 
         dailyEmotions: [], 
         settings: { reminderTime: "21:00", reminderEnabled: true } 
       };
       
-      // 기존 감정 기록에서 오늘 날짜 기록 제거 (중복 방지)
+      // 기존 감정 기록에서 오늘 날짜의 대표 감정 기록 제거 (중복 방지)
       const existingEmotions = currentEmotionTracking.dailyEmotions || [];
-      const filteredEmotions = existingEmotions.filter(emotion => emotion.date !== today);
+      console.log('📋 [EmotionSelection] 기존 감정 기록들:', existingEmotions);
+      
+      const filteredEmotions = existingEmotions.filter(emotion => 
+        !(emotion.date === today && emotion.type === 'representative')
+      );
+      console.log('🔄 [EmotionSelection] 필터링 후 감정 기록들:', filteredEmotions);
       
       // 새로운 감정 기록 추가
       const updatedDailyEmotions = [...filteredEmotions, emotionEntry];
+      console.log('✅ [EmotionSelection] 최종 감정 기록들:', updatedDailyEmotions);
       
       const updatedEmotionTracking = {
         ...currentEmotionTracking,
@@ -114,18 +123,20 @@ function EmotionSelectionModal({ isOpen, onClose, onEmotionSaved }) {
       const emotionMeta = EMOTION_META[selectedEmotion];
       const updatedMood = `${emotionMeta.emoji} ${emotionMeta.name} (강도 ${intensity}/10)`;
 
-      // 단일 업데이트로 모든 필드 한 번에 처리
+      // 하이브리드 업데이트 (양쪽 시스템 모두 업데이트)
       const updateData = {
-        emotionDistribution: updatedEmotionDistribution,
-        emotionTracking: updatedEmotionTracking,
+        emotionDistribution: updatedEmotionDistribution, // 기존 시스템 호환성
+        emotionTracking: updatedEmotionTracking, // 새로운 시스템
         mood: updatedMood
       };
 
       await updateDoc(userRef, updateData);
+      console.log('🎉 [EmotionSelection] 하이브리드 Firestore 업데이트 완료');
 
       // 성공 콜백 호출
       if (onEmotionSaved) {
         onEmotionSaved(emotionEntry);
+        console.log('📞 [EmotionSelection] onEmotionSaved 콜백 호출');
       }
 
       // 모달 닫기 및 상태 초기화

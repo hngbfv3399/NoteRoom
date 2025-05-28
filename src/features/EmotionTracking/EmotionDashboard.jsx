@@ -14,7 +14,7 @@ import { db, auth } from '@/services/firebase';
 import { EMOTION_TYPES, EMOTION_META } from '@/utils/emotionConstants';
 import ThemedButton from '@/components/ui/ThemedButton';
 
-const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
+const EmotionDashboard = forwardRef((props, ref) => {
   const { current, themes } = useSelector((state) => state.theme);
   const currentTheme = themes[current];
   
@@ -24,21 +24,33 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
 
   // 감정 데이터 로딩 함수
   const loadEmotionData = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      console.log('🔍 [EmotionDashboard] 사용자 인증 없음');
+      return;
+    }
 
+    console.log('📥 [EmotionDashboard] 감정 데이터 로딩 시작');
     try {
       const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        setEmotionData({
+        console.log('📊 [EmotionDashboard] 로드된 사용자 데이터:', userData);
+        
+        const emotionDataToSet = {
           distribution: userData.emotionDistribution || {},
           tracking: userData.emotionTracking || { dailyEmotions: [] }
-        });
+        };
+        
+        console.log('🎭 [EmotionDashboard] 설정할 감정 데이터:', emotionDataToSet);
+        setEmotionData(emotionDataToSet);
+      } else {
+        console.warn('⚠️ [EmotionDashboard] 사용자 문서가 존재하지 않음');
       }
     } catch (error) {
-      console.error('감정 데이터 로딩 실패:', error);
+      console.error('❌ [EmotionDashboard] 감정 데이터 로딩 실패:', error);
     } finally {
       setLoading(false);
+      console.log('🏁 [EmotionDashboard] 로딩 완료');
     }
   };
 
@@ -87,43 +99,45 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
     }
   };
 
-  // 감정 분포 계산 (대표 감정만)
+  // 감정 일기 기반 통계 계산
   const getEmotionStats = () => {
-    const filteredEmotions = getFilteredEmotions().filter(emotion => emotion.type !== 'diary'); // 대표 감정만
+    console.log('📊 [EmotionDashboard] 감정 일기 통계 계산 시작');
+    console.log('📊 [EmotionDashboard] dailyEmotions:', emotionData?.tracking?.dailyEmotions);
+    
     const stats = {};
+    const dailyEmotions = emotionData?.tracking?.dailyEmotions || [];
 
     Object.keys(EMOTION_META).forEach(emotion => {
+      // 감정 일기에서 해당 감정이 포함된 기록들 찾기
+      const emotionRecords = dailyEmotions.filter(record => {
+        if (record.type === 'diary') {
+          // 감정 일기의 경우 emotions 배열에서 확인
+          return record.emotions && record.emotions.includes(emotion);
+        }
+        return false; // 대표 감정은 더 이상 사용하지 않음
+      });
+
+      // 평균 강도 계산 (감정 일기의 intensity 사용)
+      const avgIntensity = emotionRecords.length > 0 ? 
+        Math.round(emotionRecords.reduce((sum, record) => sum + (record.intensity || 0), 0) / emotionRecords.length) : 0;
+
       stats[emotion] = {
-        count: filteredEmotions.filter(e => e.emotion === emotion).length,
-        avgIntensity: 0,
-        totalIntensity: emotionData?.distribution?.[emotion] || 0
+        count: emotionRecords.length,
+        avgIntensity: avgIntensity,
+        totalIntensity: avgIntensity // 감정 일기만 사용하므로 평균 강도가 총 강도
       };
-    });
 
-    // 평균 강도 계산
-    filteredEmotions.forEach(emotion => {
-      if (emotion.emotion && stats[emotion.emotion]) {
-        stats[emotion.emotion].avgIntensity += emotion.intensity || 0;
-      }
-    });
-
-    Object.keys(stats).forEach(emotion => {
-      if (stats[emotion].count > 0) {
-        stats[emotion].avgIntensity = Math.round(stats[emotion].avgIntensity / stats[emotion].count);
-      }
+      console.log(`📊 [EmotionDashboard] ${emotion}:`, {
+        count: emotionRecords.length,
+        avgIntensity: avgIntensity,
+        recordsCount: emotionRecords.length
+      });
     });
 
     return stats;
   };
 
-  // 오늘 감정 기록 여부 확인 (대표 감정만)
-  const hasTodayEmotion = () => {
-    if (!emotionData?.tracking?.dailyEmotions) return false;
-    const today = new Date().toISOString().split('T')[0];
-    return emotionData.tracking.dailyEmotions
-      .filter(emotion => emotion.type !== 'diary' && emotion.emotion && EMOTION_META[emotion.emotion]) // 대표 감정만 체크
-      .some(emotion => emotion.date === today);
-  };
+
 
   if (loading) {
     return (
@@ -140,26 +154,20 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
 
   const emotionStats = getEmotionStats();
   const filteredEmotions = getFilteredEmotions();
-  const todayRecorded = hasTodayEmotion();
   
   // 전체 감정 기록이 있는지 확인
   const hasAnyEmotionRecords = emotionData?.tracking?.dailyEmotions?.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* 헤더 및 오늘 감정 기록 버튼 - 모바일 최적화 */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0">
-        <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textColor} text-center sm:text-left`}>
-          🎭 감정 대시보드
+      {/* 헤더 - 모바일 최적화 */}
+      <div className="text-center">
+        <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.textColor}`}>
+          📝 감정 일기 대시보드
         </h2>
-        {!todayRecorded && (
-          <ThemedButton
-            onClick={onOpenEmotionModal}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3 w-full sm:w-auto"
-          >
-            오늘 감정 기록하기
-          </ThemedButton>
-        )}
+        <p className={`text-sm ${currentTheme.textColor} opacity-70 mt-2`}>
+          감정 일기를 통해 나만의 감정 패턴을 발견해보세요
+        </p>
       </div>
 
       {/* 감정 기록이 있을 때만 기간 선택과 분포 그리드 표시 */}
@@ -304,19 +312,16 @@ const EmotionDashboard = forwardRef(({ onOpenEmotionModal }, ref) => {
       {/* 빈 상태 - 감정 기록이 전혀 없을 때 */}
       {!hasAnyEmotionRecords && (
         <div className={`text-center py-12 ${currentTheme.modalBgColor} rounded-lg`}>
-          <div className="text-6xl mb-4">🎭</div>
+          <div className="text-6xl mb-4">📝</div>
           <h3 className={`text-xl font-semibold mb-2 ${currentTheme.textColor}`}>
-            아직 감정 기록이 없습니다
+            아직 감정 일기가 없습니다
           </h3>
           <p className={`mb-6 ${currentTheme.textColor} opacity-70`}>
-            첫 번째 감정을 기록해서 나만의 감정 여행을 시작해보세요!
+            첫 번째 감정 일기를 작성해서 나만의 감정 여행을 시작해보세요!
           </p>
-          <ThemedButton
-            onClick={onOpenEmotionModal}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
-          >
-            첫 감정 기록하기
-          </ThemedButton>
+          <p className={`text-sm ${currentTheme.textColor} opacity-60 mb-6`}>
+            감정 일기는 암호화되어 안전하게 보관됩니다.
+          </p>
         </div>
       )}
     </div>

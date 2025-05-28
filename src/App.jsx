@@ -5,7 +5,7 @@ import LoadingPage from "./components/LoadingPage";
 import MaintenancePage from "./components/MaintenancePage";
 import ToastNotification from "./components/ToastNotification";
 import OfflineIndicator from "./components/OfflineIndicator";
-import PerformanceDashboard from "./components/PerformanceDashboard";
+
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./services/firebase";
 import LoginPage from "./pages/auth/LoginPage";
@@ -97,8 +97,6 @@ function App() {
       {user ? <MainLayout /> : <LoginPage />}
       {/* 전역 토스트 알림 컴포넌트 */}
       <ToastNotification />
-      {/* 성능 모니터링 대시보드 (개발 환경에서만) */}
-      <PerformanceDashboard />
     </BrowserRouter>
   );
 }

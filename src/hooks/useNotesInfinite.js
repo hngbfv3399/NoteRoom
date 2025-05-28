@@ -20,12 +20,7 @@ export function useNotesInfinite(pageSize = 10) {
   const sortType = useSelector(selectSortType);
   const queryKey = useSelector(selectNoteQueryKey);
 
-  // 성능 모니터링: React Query 훅 호출 추적 (초기화 시에만)
-  const isInitialCall = React.useRef(true);
-  if (window.performanceMonitor && isInitialCall.current) {
-    window.performanceMonitor.trackCacheMiss(['notesInfinite', filterCategory, sortType]);
-    isInitialCall.current = false;
-  }
+
 
   return useInfiniteQuery({
     queryKey, // 메모이제이션된 키 사용
@@ -94,9 +89,6 @@ export function useNotesInfinite(pageSize = 10) {
     onSuccess: (data) => {
       // 캐시 히트 기록 (중복 방지)
       dispatch(incrementCacheHit());
-      if (window.performanceMonitor) {
-        window.performanceMonitor.trackCacheHit(['notesInfinite', filterCategory, sortType]);
-      }
       
       // 성능 모니터링: 캐시 히트 로그 (간소화)
       console.log('✅ [Performance] React Query 성공:', {
