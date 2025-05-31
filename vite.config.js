@@ -179,6 +179,12 @@ export default defineConfig(({ mode }) => {
       open: true,
       hmr: {
         overlay: true
+      },
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin'
       }
     },
     optimizeDeps: {

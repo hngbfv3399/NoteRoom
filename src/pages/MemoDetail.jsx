@@ -370,7 +370,11 @@ function MemoDetail({ note: propNote }) {
       <div 
         className={`prose max-w-none mb-8 ${currentTheme?.textColor || 'text-gray-900'}`}
         dangerouslySetInnerHTML={{ 
-          __html: sanitizeHtml(displayNote.content || "내용이 없습니다.") 
+          __html: sanitizeHtml(displayNote.content || "내용이 없습니다.", {
+            ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+            FORBID_TAGS: ['script', 'object', 'embed', 'form', 'input', 'button', 'iframe'],
+            FORBID_ATTR: ['onclick', 'onerror', 'onload', 'onmouseover']
+          }) 
         }}
       />
 

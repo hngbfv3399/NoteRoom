@@ -8,12 +8,12 @@ import { db, auth } from '@/services/firebase';
 
 // VAPID 공개 키 (환경변수에서 가져오기, 없으면 기본값 사용)
 // 🔑 Firebase Console에서 확인한 정확한 VAPID 키
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BJNZw1mDk66nKI5Nge3jRgp5PmWOVOJy9zFZ9BRgyWLiJlZOASQVOw3vw-abPWXTg6wEDkkE9pGiXhKPE8GChWw';
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
-// 🚨 VAPID 키 정보:
-// - Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인됨
-// - 상태: 활성 (2025. 5. 27. 추가됨)
-// - 환경변수로 설정하려면: VITE_VAPID_PUBLIC_KEY=위의키값
+// 🚨 보안 강화: VAPID 키 검증
+if (!VAPID_PUBLIC_KEY) {
+  console.error('🔑 VAPID 키가 설정되지 않았습니다. 환경변수 VITE_VAPID_PUBLIC_KEY를 설정해주세요.');
+}
 
 let swRegistration = null;
 
@@ -104,7 +104,10 @@ export const subscribeToPush = async () => {
       throw new Error('Invalid VAPID key format');
     }
 
-    console.log('VAPID 키 사용:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+    // 보안 강화: 키 로깅 시 마스킹
+    if (import.meta.env.DEV) {
+      console.log('VAPID 키 사용:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+    }
 
     // 새 구독 생성
     const subscription = await swRegistration.pushManager.subscribe({
@@ -131,8 +134,12 @@ export const subscribeToPush = async () => {
       console.error('🔑 VAPID 키 오류 해결 방법:');
       console.error('1. Firebase Console > 프로젝트 설정 > 클라우드 메시징');
       console.error('2. 웹 구성에서 "키 쌍 생성" 클릭');
-      console.error('3. 새로 생성된 키를 코드에 적용');
-      console.error('4. 현재 키:', VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+      console.error('3. 새로 생성된 키를 환경변수 VITE_VAPID_PUBLIC_KEY에 설정');
+      
+      // 보안 강화: 키 정보 마스킹
+      if (import.meta.env.DEV) {
+        console.error('4. 현재 키:', VAPID_PUBLIC_KEY ? VAPID_PUBLIC_KEY.substring(0, 20) + '...' : '설정되지 않음');
+      }
       
       // 사용자에게 친화적인 오류 메시지 표시
       if (typeof window !== 'undefined' && window.alert) {

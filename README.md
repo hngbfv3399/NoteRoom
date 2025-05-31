@@ -66,12 +66,39 @@
 - **댓글 시스템 마이그레이션** - 기존 댓글에 ID 및 대댓글 필드 자동 추가
 - **시스템 설정 개선** - 관리자 페이지에서 데이터 마이그레이션 기능
 
+## 🔒 보안 설정
+
+### 환경변수 설정
+1. `env.example` 파일을 `.env`로 복사
+2. Firebase 프로젝트 설정에서 실제 값으로 교체
+3. **중요**: 실제 API 키는 절대 Git에 커밋하지 마세요
+
+```bash
+cp env.example .env
+```
+
+### Firebase 보안 규칙
+- Firestore 보안 규칙이 적용되어 있습니다
+- Storage 보안 규칙으로 파일 업로드를 제한합니다
+- 사용자 인증 기반 접근 제어가 구현되어 있습니다
+
+### XSS 방어
+- DOMPurify를 사용한 HTML 정화
+- 사용자 입력 검증 및 필터링
+- CSP(Content Security Policy) 헤더 적용
+
+### 데이터 보호
+- 민감한 정보 로깅 방지
+- 암호화된 감정 일기 저장
+- 안전한 이미지 업로드 검증
+
 ## 🚀 시작하기
 
 ### 필수 요구사항
 - Node.js 18.0.0 이상
 - npm 9.0.0 이상
 - Firebase 프로젝트
+- VAPID 키 (푸시 알림용)
 
 ### 설치 방법
 
@@ -198,20 +225,7 @@ src/
 - [ ] AI 기반 감정 분석
 - [ ] 모바일 앱 개발
 
-## 🤝 기여하기
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
-## 📜 라이선스
-MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 👥 팀 구성
-- 개발: [개발자 이름]
-- 디자인: [디자이너 이름]
-- 기획: [기획자 이름]
 
 ## 📞 문의
 프로젝트에 대한 문의사항이 있으시다면 [이슈](https://github.com/yourusername/noteroom/issues)를 생성해주세요.

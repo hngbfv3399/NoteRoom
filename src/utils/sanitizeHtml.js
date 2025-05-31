@@ -13,6 +13,30 @@ export const sanitizeHtml = (html, options = {}) => {
     return '';
   }
 
+  // 보안 강화: 위험한 패턴 사전 검사
+  const dangerousPatterns = [
+    /<script[\s\S]*?<\/script>/gi,
+    /javascript:/gi,
+    /vbscript:/gi,
+    /data:text\/html/gi,
+    /on\w+\s*=/gi,
+    /<iframe[\s\S]*?>/gi,
+    /<object[\s\S]*?>/gi,
+    /<embed[\s\S]*?>/gi,
+    /<form[\s\S]*?>/gi,
+    /<input[\s\S]*?>/gi,
+    /<meta[\s\S]*?>/gi,
+    /<link[\s\S]*?>/gi
+  ];
+
+  // 위험한 패턴이 발견되면 모든 HTML 제거
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(html)) {
+      console.warn('Dangerous HTML pattern detected, stripping all HTML');
+      return stripAllHtml(html);
+    }
+  }
+
   // 강화된 보안 설정
   const defaultConfig = {
     ALLOWED_TAGS: [
@@ -34,7 +58,7 @@ export const sanitizeHtml = (html, options = {}) => {
     FORBID_TAGS: [
       'script', 'object', 'embed', 'form', 'input', 'button',
       'select', 'textarea', 'iframe', 'frame', 'frameset',
-      'applet', 'base', 'link', 'meta'
+      'applet', 'base', 'link', 'meta', 'style', 'title'
     ],
     FORBID_ATTR: [
       'onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout',
@@ -44,7 +68,7 @@ export const sanitizeHtml = (html, options = {}) => {
       'onafterprint', 'onmove', 'onstart', 'onfinish', 'onbounce',
       'onbeforeunload', 'onhashchange', 'onmessage', 'onoffline',
       'ononline', 'onpagehide', 'onpageshow', 'onpopstate',
-      'onredo', 'onstorage', 'onundo', 'onunload'
+      'onredo', 'onstorage', 'onundo', 'onunload', 'srcdoc'
     ],
     KEEP_CONTENT: true,
     RETURN_DOM: false,
@@ -71,8 +95,12 @@ export const sanitizeHtml = (html, options = {}) => {
     if (cleaned.includes('<script') || 
         cleaned.includes('javascript:') || 
         /on\w+\s*=/.test(cleaned) ||
-        cleaned.includes('data:text/html')) {
-      console.warn('Potentially dangerous content detected, stripping all HTML');
+        cleaned.includes('data:text/html') ||
+        cleaned.includes('vbscript:') ||
+        cleaned.includes('<iframe') ||
+        cleaned.includes('<object') ||
+        cleaned.includes('<embed')) {
+      console.warn('Potentially dangerous content detected after sanitization, stripping all HTML');
       return stripAllHtml(html);
     }
     
@@ -101,17 +129,19 @@ const stripAllHtml = (html) => {
     const textContent = doc.body.textContent || doc.body.innerText || '';
     
     // 추가 정화: 특수 문자 및 제어 문자 제거
+    const controlCharsRegex = new RegExp('[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]', 'g');
     return textContent
-      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // 제어 문자 제거
+      .replace(controlCharsRegex, '') // 제어 문자 제거
       .replace(/\s+/g, ' ') // 연속된 공백 정리
       .trim();
   } catch (error) {
     console.warn('DOMParser 실패, 정규식 사용:', error);
     // DOMParser 실패 시 정규식으로 기본적인 태그 제거
+    const controlCharsRegex = new RegExp('[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]', 'g');
     return html
       .replace(/<[^>]*>/g, '') // HTML 태그 제거
       .replace(/&[a-zA-Z0-9#]+;/g, '') // HTML 엔티티 제거
-      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // 제어 문자 제거
+      .replace(controlCharsRegex, '') // 제어 문자 제거
       .replace(/\s+/g, ' ') // 연속된 공백 정리
       .trim();
   }

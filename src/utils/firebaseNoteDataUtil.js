@@ -22,6 +22,7 @@ import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { createEmotionDistribution, createEmotionTracking } from "./emotionConstants";
 import { createCommentNotification, createNewNoteNotification, extractMentions, createMentionNotification } from "./notificationUtils";
+import { logger } from '@/utils/logger';
 
 export const addCommentToNote = async (noteId, commentContent) => {
   const currentUser = auth.currentUser;
@@ -129,7 +130,8 @@ export const saveNoteToFirestore = async (noteData) => {
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error("사용자가 로그인되어 있지 않습니다.");
 
-  console.log("현재 로그인한 사용자:", {
+  // 보안 강화: 민감한 정보 마스킹하여 로그
+  logger.secureLog("현재 로그인한 사용자", {
     uid: currentUser.uid,
     displayName: currentUser.displayName,
     email: currentUser.email
@@ -154,18 +156,19 @@ export const saveNoteToFirestore = async (noteData) => {
     commentCount: 0, // 댓글 수 초기화
   };
 
-  // 디버깅: 실제 저장될 데이터 로그
-  console.log("=== 저장될 노트 데이터 ===");
-  console.log("noteWithUserId:", JSON.stringify(noteWithUserId, null, 2));
-  console.log("필드 목록:", Object.keys(noteWithUserId));
-  console.log("필수 필드 확인:");
-  console.log("- userUid:", noteWithUserId.userUid);
-  console.log("- title:", noteWithUserId.title);
-  console.log("- content:", noteWithUserId.content);
-  console.log("- category:", noteWithUserId.category);
-  console.log("- likes:", noteWithUserId.likes);
-  console.log("- views:", noteWithUserId.views);
-  console.log("- commentCount:", noteWithUserId.commentCount);
+  // 디버깅: 실제 저장될 데이터 로그 (민감한 정보 제외)
+  if (import.meta.env.DEV) {
+    console.log("=== 저장될 노트 데이터 ===");
+    console.log("필드 목록:", Object.keys(noteWithUserId));
+    console.log("필수 필드 확인:");
+    console.log("- userUid:", noteWithUserId.userUid);
+    console.log("- title:", noteWithUserId.title);
+    console.log("- content 길이:", noteWithUserId.content?.length || 0);
+    console.log("- category:", noteWithUserId.category);
+    console.log("- likes:", noteWithUserId.likes);
+    console.log("- views:", noteWithUserId.views);
+    console.log("- commentCount:", noteWithUserId.commentCount);
+  }
 
   try {
     // 노트 저장
@@ -1026,14 +1029,15 @@ export const updateNoteInFirestore = async (noteId, updateData) => {
   console.log("=== 노트 업데이트 디버깅 ===");
   console.log("noteId:", noteId);
   console.log("currentUser.uid:", currentUser.uid);
-  console.log("원본 updateData:", JSON.stringify(updateData, null, 2));
+  if (import.meta.env.DEV) {
+    console.log("원본 updateData:", JSON.stringify(updateData, null, 2));
+  }
   
   // content 필드 특별 디버깅
-  if (updateData.content) {
+  if (updateData.content && import.meta.env.DEV) {
     console.log("=== CONTENT 디버깅 ===");
     console.log("content 타입:", typeof updateData.content);
     console.log("content 길이:", updateData.content.length);
-    console.log("content 내용:", updateData.content);
     console.log("content가 빈 문자열인가?", updateData.content === "");
     console.log("content가 <p></p>인가?", updateData.content === "<p></p>");
     console.log("content 트림 후:", updateData.content.trim());
