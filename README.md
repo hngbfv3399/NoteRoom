@@ -631,7 +631,6 @@ service cloud.firestore {
 
 *"감정을 기록하고, 생각을 공유하며, 함께 성장하는 공간"*
 
-[![Deployed with Vercel](https://img.shields.io/badge/Deployed%20with-Vercel-000000?style=flat&logo=vercel&logoColor=white)](https://vercel.com)
 [![Powered by Firebase](https://img.shields.io/badge/Powered%20by-Firebase-FFCA28?style=flat&logo=firebase&logoColor=black)](https://firebase.google.com)
 
 </div>
